@@ -5,3 +5,6 @@
 [submodule "json"]
 	path = json
 	url = https://github.com/nlohmann/json.git
+[submodule "winxx"]
+	path = winxx
+	url = https://github.com/donfucius/winxx.git
