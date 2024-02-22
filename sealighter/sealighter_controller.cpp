@@ -1,4 +1,5 @@
 #include "sealighter_krabs.h"
+#include <array>
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -8,6 +9,7 @@
 #include "sealighter_predicates.h"
 #include "sealighter_handler.h"
 #include "sealighter_provider.h"
+#include "sync.h"
 
 // -------------------------
 // GLOBALS - START
@@ -23,6 +25,10 @@ static user_trace* g_user_session = NULL;
 
 // Holds a KrabsETW Kernel Session Trace if needed
 static kernel_trace* g_kernel_session = NULL;
+
+// Sealighter event
+constexpr std::array<wchar_t, 22> SEALIGHTER_EVENT_NAME{ L"Local\\SealighterEvent" };
+
 
 // -------------------------
 // GLOBALS - END
@@ -628,7 +634,7 @@ int add_user_traces
 (
     json json_config,
     EVENT_TRACE_PROPERTIES  session_properties,
-    std::wstring session_name
+    const std::wstring& session_name
 )
 {
     int status = ERROR_SUCCESS;
@@ -771,10 +777,7 @@ int add_user_traces
     Parse the Config file, setup
     ETW Session and Krabs filters
 */
-int parse_config
-(
-    std::string       config_string
-)
+int parse_config(const std::string& config_string)
 {
     int     status = ERROR_SUCCESS;
     EVENT_TRACE_PROPERTIES  session_properties = { 0 };
@@ -921,10 +924,7 @@ void stop_sealighter()
     Handler for Ctrl+C cancel events.
     Makes sure we stop our ETW Session when shutting down
 */
-BOOL WINAPI crl_c_handler
-(
-    DWORD fdwCtrlType
-)
+BOOL WINAPI crl_c_handler(DWORD fdwCtrlType)
 {
     switch (fdwCtrlType)
     {
@@ -943,7 +943,7 @@ BOOL WINAPI crl_c_handler
 // -------------------------
 int run_sealighter
 (
-    std::string config_string
+    const std::string& config_string
 )
 {
     int status = ERROR_SUCCESS;
@@ -966,11 +966,16 @@ int run_sealighter
     if (ERROR_SUCCESS != status) {
         return status;
     }
+
     if (NULL == g_user_session && NULL == g_kernel_session) {
         log_messageA("Failed to define any ETW Session\n");
         return SEALIGHTER_ERROR_NO_SESSION_CREATED;
     }
     else {
+        // event
+        winxx::NamedEvent<wchar_t> sealighterEvent{ SEALIGHTER_EVENT_NAME.data(), EVENT_MODIFY_STATE, FALSE };
+        sealighterEvent.Set();
+
         // Setup Buffering thread if needed
         start_bufferring();
 
