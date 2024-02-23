@@ -8,3 +8,6 @@
 [submodule "winxx"]
 	path = winxx
 	url = https://github.com/donfucius/winxx.git
+[submodule "GSL"]
+	path = GSL
+	url = https://github.com/microsoft/GSL.git
