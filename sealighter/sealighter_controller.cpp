@@ -26,9 +26,10 @@ static user_trace* g_user_session = NULL;
 // Holds a KrabsETW Kernel Session Trace if needed
 static kernel_trace* g_kernel_session = NULL;
 
-// Sealighter event
-constexpr std::array<wchar_t, 22> SEALIGHTER_EVENT_NAME{ L"Local\\SealighterEvent" };
-
+// Sealighter events
+constexpr std::array<wchar_t, 24> EVENT_SEALIGHTER_STARTED{ LR"(Local\SealighterStarted)" };
+constexpr std::array<wchar_t, 24> EVENT_SEALIGHTER_STOPPED = { LR"(Local\SealighterStopped)" };
+constexpr std::array<wchar_t, 21> EVENT_STOP_SEALIGHTER = { LR"(Local\StopSealighter)" };
 
 // -------------------------
 // GLOBALS - END
@@ -917,6 +918,9 @@ void stop_sealighter()
     if (NULL != g_kernel_session) {
         g_kernel_session->stop();
     }
+
+    winxx::NamedEvent<wchar_t> evtStopped{ EVENT_SEALIGHTER_STOPPED.data(), EVENT_MODIFY_STATE, FALSE};
+    evtStopped.Set();
 }
 
 
@@ -935,6 +939,16 @@ BOOL WINAPI crl_c_handler(DWORD fdwCtrlType)
     return FALSE;
 }
 
+static void WaitForStopEvent()
+{
+    if (winxx::NamedEvent<wchar_t> evtStop{ EVENT_STOP_SEALIGHTER.data(), nullptr, TRUE, FALSE };
+        evtStop.Wait(INFINITE) == WAIT_FAILED) {
+        log_messageA("Waiting for the StopSealighter event failed.\n");
+        exit(-1);
+    }
+    stop_sealighter();
+    log_messageA("StopSealighter event received. Stopped.\n");
+}
 
 // -------------------------
 // PRIVATE FUNCTIONS - END
@@ -955,6 +969,9 @@ int run_sealighter
         return SEALIGHTER_ERROR_EVENTLOG_REGISTER;
     }
 
+    // Create a thread to wait for the event StopSealighter
+    auto waitForStop = std::jthread(WaitForStopEvent);
+
     // Add ctrl+C handler to make sure we stop the trace
     if (!SetConsoleCtrlHandler(crl_c_handler, TRUE)) {
         log_messageA("failed to set ctrl-c handler\n");
@@ -973,7 +990,7 @@ int run_sealighter
     }
     else {
         // event
-        winxx::NamedEvent<wchar_t> sealighterEvent{ SEALIGHTER_EVENT_NAME.data(), EVENT_MODIFY_STATE, FALSE };
+        winxx::NamedEvent<wchar_t> sealighterEvent{ EVENT_SEALIGHTER_STARTED.data(), EVENT_MODIFY_STATE, FALSE };
         sealighterEvent.Set();
 
         // Setup Buffering thread if needed

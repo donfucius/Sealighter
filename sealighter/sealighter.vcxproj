@@ -62,7 +62,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\GSL\include;$(ProjectDir)..\winxx\include;$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -84,7 +84,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\GSL\include;$(ProjectDir)..\winxx\include;$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>

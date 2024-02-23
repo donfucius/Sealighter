@@ -6,7 +6,7 @@
  */
 int run_sealighter
 (
-    std::string config_string
+    const std::string& config_string
 );
 
 /*
