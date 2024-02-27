@@ -28,7 +28,6 @@ static kernel_trace* g_kernel_session = NULL;
 
 // Sealighter events
 constexpr std::array<wchar_t, 24> EVENT_SEALIGHTER_STARTED{ LR"(Local\SealighterStarted)" };
-constexpr std::array<wchar_t, 24> EVENT_SEALIGHTER_STOPPED = { LR"(Local\SealighterStopped)" };
 constexpr std::array<wchar_t, 21> EVENT_STOP_SEALIGHTER = { LR"(Local\StopSealighter)" };
 
 // -------------------------
@@ -918,9 +917,6 @@ void stop_sealighter()
     if (NULL != g_kernel_session) {
         g_kernel_session->stop();
     }
-
-    winxx::NamedEvent<wchar_t> evtStopped{ EVENT_SEALIGHTER_STOPPED.data(), EVENT_MODIFY_STATE, FALSE};
-    evtStopped.Set();
 }
 
 
