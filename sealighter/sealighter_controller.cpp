@@ -944,6 +944,7 @@ static void WaitForStopEvent()
     }
     stop_sealighter();
     log_messageA("StopSealighter event received. Stopped.\n");
+    exit(0);
 }
 
 // -------------------------
