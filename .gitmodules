@@ -7,3 +7,6 @@
 [submodule "GSL"]
 	path = GSL
 	url = https://github.com/microsoft/GSL.git
+[submodule "krabsetw"]
+	path = krabsetw
+	url = https://github.com/microsoft/krabsetw.git
