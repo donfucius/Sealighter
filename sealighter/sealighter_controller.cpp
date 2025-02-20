@@ -892,6 +892,10 @@ void run_trace(trace<T>* trace)
         // Ensure we always stop the trace afterwards
         try {
             trace->start();
+
+            // notify the process that is waiting for the trace to start
+            winxx::NamedEvent<wchar_t> sealighterEvent{ EVENT_SEALIGHTER_STARTED.data(), EVENT_MODIFY_STATE, FALSE };
+            sealighterEvent.Set();
         }
         catch (const std::exception & e) {
             log_messageA("%s\n", e.what());
@@ -985,43 +989,39 @@ int run_sealighter
         log_messageA("Failed to define any ETW Session\n");
         return SEALIGHTER_ERROR_NO_SESSION_CREATED;
     }
-    else {
-        // event
-        winxx::NamedEvent<wchar_t> sealighterEvent{ EVENT_SEALIGHTER_STARTED.data(), EVENT_MODIFY_STATE, FALSE };
-        sealighterEvent.Set();
 
-        // Setup Buffering thread if needed
-        start_bufferring();
 
-        // Start Trace we've configured
-        // Don't run multithreaded if we don't have to
-        if (NULL != g_user_session && NULL == g_kernel_session) {
-            log_messageA("Starting User Trace...\n");
-            log_messageA("-----------------------------------------\n");
-            run_trace(g_user_session);
-        }
-        else if (NULL == g_user_session && NULL != g_kernel_session) {
-            log_messageA("Starting Kernel Trace...\n");
-            log_messageA("-----------------------------------------\n");
-            run_trace(g_kernel_session);
-        }
-        else {
-            // Have to multi-thread it
-            log_messageA("Starting User and Kernel Traces...\n");
-            log_messageA("-----------------------------------------\n");
-            std::thread user_thread = std::thread(run_trace<details::ut>, g_user_session);
-            std::thread kernel_thread = std::thread(run_trace<details::kt>, g_kernel_session);
+    // Setup Buffering thread if needed
+    start_bufferring();
 
-            // Call join, blocking until both have shut down
-            user_thread.join();
-            kernel_thread.join();
-        }
-
-        // Teardown and cleanup
-        stop_bufferring();
-        teardown_logger_file();
-        (void)EventUnregisterSealighter();
+    // Start Trace we've configured
+    // Don't run multithreaded if we don't have to
+    if (NULL != g_user_session && NULL == g_kernel_session) {
+        log_messageA("Starting User Trace...\n");
+        log_messageA("-----------------------------------------\n");
+        run_trace(g_user_session);
     }
+    else if (NULL == g_user_session && NULL != g_kernel_session) {
+        log_messageA("Starting Kernel Trace...\n");
+        log_messageA("-----------------------------------------\n");
+        run_trace(g_kernel_session);
+    }
+    else {
+        // Have to multi-thread it
+        log_messageA("Starting User and Kernel Traces...\n");
+        log_messageA("-----------------------------------------\n");
+        std::thread user_thread = std::thread(run_trace<details::ut>, g_user_session);
+        std::thread kernel_thread = std::thread(run_trace<details::kt>, g_kernel_session);
+
+        // Call join, blocking until both have shut down
+        user_thread.join();
+        kernel_thread.join();
+    }
+
+    // Teardown and cleanup
+    stop_bufferring();
+    teardown_logger_file();
+    (void)EventUnregisterSealighter();
 
     return status;
 }

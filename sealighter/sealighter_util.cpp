@@ -4,6 +4,7 @@
 #include <codecvt>
 #include "sealighter_json.h"
 #include "sealighter_util.h"
+#include "../exutils/exutils.h"
 
 
 std::string convert_json_string
@@ -46,8 +47,7 @@ std::string convert_wstr_str
     const std::wstring& from
 )
 {
-    std::string to(from.begin(), from.end());
-    return to;
+    return exutils::WStringToString(CP_UTF8, from);
 }
 
 
@@ -144,7 +144,7 @@ std::string convert_timestamp_string
 
     ft.dwHighDateTime = from.HighPart;
     ft.dwLowDateTime = from.LowPart;
-    
+
     std::string to = convert_filetime_string(ft);
     return to;
 }

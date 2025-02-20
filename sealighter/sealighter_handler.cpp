@@ -4,9 +4,10 @@
 #include "sealighter_util.h"
 #include "sealighter_provider.h"
 
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <mutex>
-#include <atomic>
 
 // -------------------------
 // GLOBALS - START
@@ -483,6 +484,8 @@ void flush_buffered_lists()
     }
     g_buffer_lists_mutex.unlock();
 }
+
+// ...
 
 void bufferring_thread()
 {
