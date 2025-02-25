@@ -27,14 +27,21 @@ static user_trace* g_user_session = NULL;
 static kernel_trace* g_kernel_session = NULL;
 
 // Sealighter events
-constexpr std::array<wchar_t, 24> EVENT_SEALIGHTER_STARTED{ LR"(Local\SealighterStarted)" };
-constexpr std::array<wchar_t, 21> EVENT_STOP_SEALIGHTER = { LR"(Local\StopSealighter)" };
+constexpr std::wstring_view EVENT_SEALIGHTER_STARTED{ LR"(Local\SealighterStarted)" };
+constexpr std::wstring_view EVENT_STOP_SEALIGHTER{ LR"(Local\StopSealighter)" };
 
 // -------------------------
 // GLOBALS - END
 // -------------------------
 // PRIVATE FUNCTIONS - START
 // -------------------------
+
+static inline void SetSealighterStartedEvent()
+{
+	// notify the process that is waiting for the trace to start
+	winxx::NamedEvent<wchar_t> sealighterEvent{ EVENT_SEALIGHTER_STARTED.data(), EVENT_MODIFY_STATE, FALSE };
+	sealighterEvent.Set();
+}
 
 /*
     Adds a single property comparer filter to a list
@@ -892,10 +899,6 @@ void run_trace(trace<T>* trace)
         // Ensure we always stop the trace afterwards
         try {
             trace->start();
-
-            // notify the process that is waiting for the trace to start
-            winxx::NamedEvent<wchar_t> sealighterEvent{ EVENT_SEALIGHTER_STARTED.data(), EVENT_MODIFY_STATE, FALSE };
-            sealighterEvent.Set();
         }
         catch (const std::exception & e) {
             log_messageA("%s\n", e.what());
@@ -990,7 +993,6 @@ int run_sealighter
         return SEALIGHTER_ERROR_NO_SESSION_CREATED;
     }
 
-
     // Setup Buffering thread if needed
     start_bufferring();
 
@@ -999,17 +1001,20 @@ int run_sealighter
     if (NULL != g_user_session && NULL == g_kernel_session) {
         log_messageA("Starting User Trace...\n");
         log_messageA("-----------------------------------------\n");
+        SetSealighterStartedEvent();
         run_trace(g_user_session);
     }
     else if (NULL == g_user_session && NULL != g_kernel_session) {
         log_messageA("Starting Kernel Trace...\n");
         log_messageA("-----------------------------------------\n");
+        SetSealighterStartedEvent();
         run_trace(g_kernel_session);
     }
     else {
         // Have to multi-thread it
         log_messageA("Starting User and Kernel Traces...\n");
         log_messageA("-----------------------------------------\n");
+        SetSealighterStartedEvent();
         std::thread user_thread = std::thread(run_trace<details::ut>, g_user_session);
         std::thread kernel_thread = std::thread(run_trace<details::kt>, g_kernel_session);
 

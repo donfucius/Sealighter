@@ -61,11 +61,12 @@
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);SPDLOG_USE_STD_FORMAT</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\GSL\include;$(ProjectDir)..\winxx\include;$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\GSL\include;$(ProjectDir)..\winxx\include;$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include;C:\devdrv\scoop\apps\vcpkg\current\packages\spdlog_x64-windows\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -84,7 +85,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);SPDLOG_USE_STD_FORMAT</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)..\GSL\include;$(ProjectDir)..\winxx\include;$(ProjectDir)..\krabsetw\krabs;$(ProjectDir)..\krabsetw\Microsoft.O365.Security.Native.ETW;$(ProjectDir)..\json\single_include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -103,6 +104,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\exutils\exutils.cpp" />
+    <ClCompile Include="logger.cpp" />
     <ClCompile Include="sealighter_controller.cpp" />
     <ClCompile Include="sealighter_main.cpp" />
     <ClCompile Include="sealighter_handler.cpp" />
@@ -110,6 +112,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\json\single_include\nlohmann\json.hpp" />
+    <ClInclude Include="logger.h" />
     <ClInclude Include="sealighter_controller.h" />
     <ClInclude Include="sealighter_errors.h" />
     <ClInclude Include="sealighter_json.h" />

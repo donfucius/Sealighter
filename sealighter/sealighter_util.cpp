@@ -2,10 +2,13 @@
 #include <sstream>
 #include <fstream>
 #include <codecvt>
+
+#include "logger.h"
 #include "sealighter_json.h"
 #include "sealighter_util.h"
 #include "../exutils/exutils.h"
 
+#define loggr (logger::Logger::GetInstance().logger())
 
 std::string convert_json_string
 (
@@ -293,6 +296,7 @@ VOID log_messageA(const CHAR* format, ...)
     va_end(arg_ptr);
     OutputDebugStringA(message);
     printf("%s", message);
+	loggr.debug(message);
 }
 
 VOID log_messageW(const WCHAR* format, ...)
@@ -304,4 +308,5 @@ VOID log_messageW(const WCHAR* format, ...)
     va_end(arg_ptr);
     OutputDebugStringW(message);
     wprintf(L"%s", message);
+    loggr.debug(message);
 }

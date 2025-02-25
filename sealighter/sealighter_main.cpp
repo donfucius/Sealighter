@@ -1,10 +1,17 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+
+#include "logger.h"
 #include "sealighter_handler.h"
 #include "sealighter_errors.h"
 #include "sealighter_util.h"
 #include "sealighter_controller.h"
+
+constexpr std::string_view APP_NAME{ "Sealighter" };
+constexpr std::string_view LOG_FILE_PATH{ "c:/notouchme/sealighter/sealighter.log" };
+#define loggr (logger::Logger::GetInstance().logger())
+
 /*
     Main entrypoint
 */
@@ -14,6 +21,7 @@ int main
     char* argv[]
 )
 {
+	logger::Logger::GetInstance().init(APP_NAME, LOG_FILE_PATH);
     int status = 0;
     if (2 != argc) {
         log_messageA("usage: %s <config_file>\n", argv[0]);
