@@ -88,6 +88,6 @@ inline size_t StrStrI(const std::basic_string<CharT>& str, const std::basic_stri
     return std::basic_string<CharT>::npos;
 }
 
-} // namespace utils
+} // namespace exutils
 
-#endif // !UTILS_H
+#endif // !EXUTILS_H
