@@ -10,3 +10,6 @@
 [submodule "krabsetw"]
 	path = krabsetw
 	url = https://github.com/microsoft/krabsetw.git
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest.git
