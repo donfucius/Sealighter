@@ -8,4 +8,3 @@
 #include "krabs.hpp"
 #pragma warning( pop )
 
-using namespace krabs;

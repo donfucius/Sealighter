@@ -1,15 +1,5 @@
 #pragma once
 
-
-/*
- * Start Sealighter
- */
-int run_sealighter
-(
-    const std::string& config_string
-);
-
-/*
- * Stop Sealighter
- */
-void stop_sealighter();
+// SealighterSession is defined in sealighter_handler.h.
+// The run() and stop() functionality is now accessed through
+// SealighterSession member functions rather than free functions.

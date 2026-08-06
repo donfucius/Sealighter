@@ -9,18 +9,25 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Setup MsBuild
-        uses: microsoft/setup-msbuild@v1.1
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install spdlog via vcpkg
+        run: |
+          vcpkg install spdlog:x64-windows
 
       - name: Build Debug
         run: msbuild.exe /nologo /m /t:Rebuild /p:Configuration=Debug sealighter.sln
+
+      - name: Run Tests
+        run: x64\Debug\sealighter_tests.exe --gtest_color=yes
 
       - name: Build Release
         run: msbuild.exe /nologo /m /t:Rebuild /p:Configuration=Release sealighter.sln

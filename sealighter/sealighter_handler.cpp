@@ -4,36 +4,14 @@
 #include "sealighter_util.h"
 #include "sealighter_provider.h"
 
+#include "logger.h"
+#define loggr (logger::Logger::GetInstance().logger())
+
 #include <atomic>
 #include <chrono>
 #include <fstream>
 #include <mutex>
 
-// -------------------------
-// GLOBALS - START
-// -------------------------
-
-// Output file to write events to
-static std::ofstream g_outfile;
-
-// Helper mutex to ensure threaded functions
-// print a whole event without interruption
-static std::mutex g_print_mutex;
-
-// Holds format
-static Output_format g_output_format;
-
-// Hold data for buffering
-static std::map<std::string, std::vector< event_buffer_list_t>> g_buffer_lists;
-// Default to 30 seconds
-static std::uint32_t g_buffer_lists_timeout_seconds = 5;
-static std::mutex g_buffer_lists_mutex;
-static std::thread g_buffer_list_thread;
-static std::atomic_bool g_buffer_thread_stop = false;
-static std::condition_variable g_buffer_list_con_var;
-
-// -------------------------
-// GLOBALS - END
 // -------------------------
 // PRIVATE FUNCTIONS - START
 // -------------------------
@@ -44,25 +22,24 @@ static std::condition_variable g_buffer_list_con_var;
     to ensure we print each event wholey before
     another can
 */
-void threaded_print_ln
+void SealighterSession::threaded_print_ln
 (
-    std::string event_string
+    const std::string& event_string
 )
 {
-    g_print_mutex.lock();
-    log_messageA("%s\n", event_string.c_str());
-    g_print_mutex.unlock();
+    std::lock_guard<std::mutex> lock(print_mutex_);
+    loggr.info("{}", event_string.c_str());
 }
 
 
 /*
     Write to Event Log
 */
-void write_event_log
+void SealighterSession::write_event_log
 (
-    json            json_event,
-    std::string     trace_name,
-    std::string     event_string
+    const json&         json_event,
+    const std::string&  trace_name,
+    const std::string&  event_string
 )
 {
     DWORD status = ERROR_SUCCESS;
@@ -87,7 +64,7 @@ void write_event_log
     );
 
     if (status != ERROR_SUCCESS) {
-        log_messageA("Error %ul line %d\n", status, __LINE__);
+        loggr.info("Error {} line {}", status, __LINE__);
         return;
     }
 }
@@ -98,24 +75,47 @@ void write_event_log
     to ensure we print each event wholey before
     another can
 */
-void threaded_write_file_ln
+void SealighterSession::threaded_write_file_ln
 (
-    std::string event_string
+    const std::string& event_string
 )
 {
-    g_print_mutex.lock();
-    g_outfile << event_string << std::endl;
-    g_print_mutex.unlock();
+    std::lock_guard<std::mutex> lock(print_mutex_);
+    outfile_ << event_string << std::endl;
+}
+
+
+static void parse_extended_data(const EVENT_RECORD& record, json& json_event)
+{
+    if (record.ExtendedDataCount == 0) {
+        return;
+    }
+    for (USHORT i = 0; i < record.ExtendedDataCount; i++)
+    {
+        EVENT_HEADER_EXTENDED_DATA_ITEM data_item = record.ExtendedData[i];
+        if (data_item.ExtType == EVENT_HEADER_EXT_TYPE_STACK_TRACE64) {
+            PEVENT_EXTENDED_ITEM_STACK_TRACE64 stacktrace =
+                (PEVENT_EXTENDED_ITEM_STACK_TRACE64)data_item.DataPtr;
+            uint32_t stack_length = (data_item.DataSize - sizeof(ULONG64)) / sizeof(ULONG64);
+
+            json json_stacktrace = json::array();
+            for (size_t x = 0; x < stack_length; x++)
+            {
+                json_stacktrace.push_back(convert_ulong64_hexstring(stacktrace->Address[x]));
+            }
+            json_event["stack_trace"] = json_stacktrace;
+        }
+    }
 }
 
 
 /*
     Convert an ETW Event to JSON
 */
-json parse_event_to_json
+json SealighterSession::parse_event_to_json
 (
     const EVENT_RECORD& record,
-    const trace_context&,
+    const krabs::trace_context&,
     std::shared_ptr<struct sealighter_context_t> sealighter_context,
     krabs::schema       schema
 )
@@ -284,51 +284,25 @@ json parse_event_to_json
         json_event["properties"] = json_properties;
     }
 
-    // Check if we're meant to parse any extended data
-    if (record.ExtendedDataCount != 0) {
-        // At the moment we only support EVENT_HEADER_EXT_TYPE_STACK_TRACE64
-        // The extra field is TRACE64 (and not TRACE32) even in the event the
-        // process that generated the event is 32Bit
-        for (USHORT i = 0; i < record.ExtendedDataCount; i++)
-        {
-            EVENT_HEADER_EXTENDED_DATA_ITEM data_item = record.ExtendedData[i];
-
-            if (data_item.ExtType == EVENT_HEADER_EXT_TYPE_STACK_TRACE64) {
-                PEVENT_EXTENDED_ITEM_STACK_TRACE64 stacktrace =
-                    (PEVENT_EXTENDED_ITEM_STACK_TRACE64)data_item.DataPtr;
-                uint32_t stack_length = (data_item.DataSize - sizeof(ULONG64)) / sizeof(ULONG64);
-
-                json json_stacktrace = json::array();
-                for (size_t x = 0; x < stack_length; x++)
-                {
-                    // Stacktraces make more sense in hex
-                    json_stacktrace.push_back(convert_ulong64_hexstring(stacktrace->Address[x]));
-                }
-                // We're ignoring the MatchId, which if not 0 then the stack is split across events
-                // But stiching it together would be too much of a pain for the mostly-stateless
-                // Sealighter. So we'll just collect what we've got.
-                json_event["stack_trace"] = json_stacktrace;
-            }
-        }
-    }
+    parse_extended_data(record, json_event);
 
     return json_event;
 }
 
-void output_json_event
+void SealighterSession::output_json_event
 (
-    json json_event
+    const json& json_event
 )
 {
     // If writing to a file, don't pretty print
     // This makes it 1 line per event
-    bool pretty_print = (Output_format::output_file != g_output_format);
+    bool pretty_print = (Output_format::output_file != output_format_);
     std::string event_string = convert_json_string(json_event, pretty_print);
     std::string trace_name = json_event["header"]["trace_name"];
 
     // Log event if we successfully parsed it
     if (!event_string.empty()) {
-        switch (g_output_format)
+        switch (output_format_)
         {
         case output_stdout:
             threaded_print_ln(event_string);
@@ -343,65 +317,64 @@ void output_json_event
     }
 }
 
-void handle_event_context
+void SealighterSession::handle_event_context
 (
     const EVENT_RECORD& record,
-    const trace_context& trace_context,
+    const krabs::trace_context& trace_context,
     std::shared_ptr<struct sealighter_context_t> sealighter_context
 )
 {
     json json_event;
-    schema schema(record, trace_context.schema_locator);
+    krabs::schema schema(record, trace_context.schema_locator);
     bool buffered = false;
 
     std::string trace_name = sealighter_context->trace_name;
     json_event = parse_event_to_json(record, trace_context, sealighter_context, schema);
 
     // Only care about event buffering if required
-    if (g_buffer_lists.size() > 0 && g_buffer_lists.find(trace_name) != g_buffer_lists.end()) {
-        // Lock Mutex for safety
-        g_buffer_lists_mutex.lock();
+    {
+        std::lock_guard<std::mutex> lock(buffer_lists_mutex_);
+        if (buffer_lists_.size() > 0 && buffer_lists_.find(trace_name) != buffer_lists_.end()) {
+            for (event_buffer_list_t& buffer : buffer_lists_[trace_name]) {
+                if (buffer.event_id != (uint32_t)schema.event_id()) {
+                    continue;
+                }
+                if (buffer.event_count < buffer.max_before_buffering) {
+                    // Increment counter but report event
+                    buffer.event_count += 1;
+                    break;
+                }
 
-        for (event_buffer_list_t& buffer : g_buffer_lists[trace_name]) {
-            if (buffer.event_id != (uint32_t)schema.event_id()) {
-                continue;
-            }
-            if (buffer.event_count < buffer.max_before_buffering) {
-                // Increment counter but report event
-                buffer.event_count += 1;
-                break;
-            }
-
-            // We're buffering. See if we already have the matching event
-            bool matched_event = false;
-            for (json& json_event_buffered : buffer.json_event_buffered) {
-                bool matched_field = true;
-                for (std::string prop_to_compare: buffer.properties_to_compare) {
-                    auto field_event = convert_json_string(json_event["properties"][prop_to_compare], false);
-                    auto field_buffered = convert_json_string(json_event_buffered["properties"][prop_to_compare], false);
-                    if (field_event != field_buffered) {
-                        // Not a match
-                        matched_field = false;
-                        break;
+                // We're buffering. See if we already have the matching event
+                bool matched_event = false;
+                for (json& json_event_buffered : buffer.json_event_buffered) {
+                    bool matched_field = true;
+                    for (std::string prop_to_compare: buffer.properties_to_compare) {
+                        auto field_event = convert_json_string(json_event["properties"][prop_to_compare], false);
+                        auto field_buffered = convert_json_string(json_event_buffered["properties"][prop_to_compare], false);
+                        if (field_event != field_buffered) {
+                            // Not a match
+                            matched_field = false;
+                            break;
+                        }
+                    }
+                    if (matched_field) {
+                        // Matched, increase event count
+                        auto old_count = json_event_buffered["header"]["buffered_count"].get<std::uint32_t>();
+                        json_event_buffered["header"]["buffered_count"] = old_count + 1;
+                        matched_event = true;
                     }
                 }
-                if (matched_field) {
-                    // Matched, increase event count
-                    auto old_count = json_event_buffered["header"]["buffered_count"].get<std::uint32_t>();
-                    json_event_buffered["header"]["buffered_count"] = old_count + 1;
-                    matched_event = true;
+                if (!matched_event) {
+                    // Event wasn't in the list, add it
+                    json_event["header"]["buffered_count"] = 1;
+                    buffer.json_event_buffered.push_back(json_event);
                 }
+                // As we're buffering don't report event
+                buffered = true;
+                break;
             }
-            if (!matched_event) {
-                // Event wasn't in the list, add it
-                json_event["header"]["buffered_count"] = 1;
-                buffer.json_event_buffered.push_back(json_event);
-            }
-            // As we're buffering don't report event
-            buffered = true;
-            break;
         }
-        g_buffer_lists_mutex.unlock();
     }
 
     // Report event only if not buffering
@@ -412,23 +385,23 @@ void handle_event_context
 
 
 
-void handle_event
+void SealighterSession::handle_event
 (
     const EVENT_RECORD& record,
-    const trace_context& trace_context
+    const krabs::trace_context& trace_context
 )
 {
     auto dummy_context = std::make_shared<struct sealighter_context_t>("", false);
-    handle_event_context(record, trace_context, dummy_context);
+    this->handle_event_context(record, trace_context, dummy_context);
 }
 
-int setup_logger_file
+int SealighterSession::setup_logger_file
 (
-    std::string filename
+    const std::string& filename
 )
 {
-    g_outfile.open(filename.c_str(), std::ios::out | std::ios::app);
-    if (g_outfile.good()) {
+    outfile_.open(filename.c_str(), std::ios::out | std::ios::app);
+    if (outfile_.good()) {
         return ERROR_SUCCESS;
     }
     else {
@@ -436,44 +409,44 @@ int setup_logger_file
     }
 }
 
-void teardown_logger_file()
+void SealighterSession::teardown_logger_file()
 {
-    if (g_outfile.is_open()) {
-        g_outfile.close();
+    if (outfile_.is_open()) {
+        outfile_.close();
     }
 }
 
 
-void set_output_format(Output_format format)
+void SealighterSession::set_output_format(Output_format format)
 {
-    g_output_format = format;
+    output_format_ = format;
 }
 
 
-void add_buffered_list
+void SealighterSession::add_buffered_list
 (
-    std::string trace_name,
+    const std::string& trace_name,
     event_buffer_list_t buffered_list
 )
 {
-    if (g_buffer_lists.find(trace_name) == g_buffer_lists.end()) {
-        g_buffer_lists[trace_name] = std::vector<event_buffer_list_t>();
+    if (buffer_lists_.find(trace_name) == buffer_lists_.end()) {
+        buffer_lists_[trace_name] = std::vector<event_buffer_list_t>();
     }
-    g_buffer_lists[trace_name].push_back(buffered_list);
+    buffer_lists_[trace_name].push_back(buffered_list);
 }
 
-void set_buffer_lists_timeout
+void SealighterSession::set_buffer_lists_timeout
 (
     uint32_t timeout
 )
 {
-    g_buffer_lists_timeout_seconds = timeout;
+    buffer_lists_timeout_seconds_ = timeout;
 }
 
-void flush_buffered_lists()
+void SealighterSession::flush_buffered_lists()
 {
-    g_buffer_lists_mutex.lock();
-    for (auto& buffer_list : g_buffer_lists) {
+    std::lock_guard<std::mutex> lock(buffer_lists_mutex_);
+    for (auto& buffer_list : buffer_lists_) {
         for (auto& buffer : buffer_list.second) {
             for (auto& json_event : buffer.json_event_buffered) {
                 output_json_event(json_event);
@@ -482,22 +455,21 @@ void flush_buffered_lists()
             buffer.event_count = 0;
         }
     }
-    g_buffer_lists_mutex.unlock();
 }
 
 // ...
 
-void bufferring_thread()
+void SealighterSession::buffering_thread()
 {
     std::mutex thread_mutex;
     std::unique_lock<std::mutex> lock(thread_mutex);
     auto time_point = std::chrono::system_clock::now() +
-        std::chrono::seconds(g_buffer_lists_timeout_seconds);
-    while (!g_buffer_thread_stop) {
-        while (g_buffer_list_con_var.wait_until(lock, time_point) == std::cv_status::timeout) {
+        std::chrono::seconds(buffer_lists_timeout_seconds_);
+    while (!buffer_thread_stop_) {
+        while (buffer_list_con_var_.wait_until(lock, time_point) == std::cv_status::timeout) {
             flush_buffered_lists();
             time_point = std::chrono::system_clock::now() +
-                std::chrono::seconds(g_buffer_lists_timeout_seconds);
+                std::chrono::seconds(buffer_lists_timeout_seconds_);
         }
     }
 
@@ -505,20 +477,20 @@ void bufferring_thread()
     flush_buffered_lists();
 }
 
-void start_bufferring()
+void SealighterSession::start_bufferring()
 {
     // Only start buffer thread if we need to
-    if (g_buffer_lists.size() != 0 && !g_buffer_thread_stop.load()) {
-        g_buffer_list_thread = std::thread(bufferring_thread);
+    if (buffer_lists_.size() != 0 && !buffer_thread_stop_.load()) {
+        buffer_list_thread_ = std::thread(&SealighterSession::buffering_thread, this);
     }
 }
 
 
-void stop_bufferring()
+void SealighterSession::stop_bufferring()
 {
-    if (g_buffer_lists.size() != 0 && !g_buffer_thread_stop.load()) {
-        g_buffer_thread_stop = true;
-        g_buffer_list_con_var.notify_one();
-        g_buffer_list_thread.join();
+    if (buffer_lists_.size() != 0 && !buffer_thread_stop_.load()) {
+        buffer_thread_stop_ = true;
+        buffer_list_con_var_.notify_one();
+        buffer_list_thread_.join();
     }
 }

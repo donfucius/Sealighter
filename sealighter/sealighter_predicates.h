@@ -4,18 +4,17 @@
 #include <locale>
 #include <algorithm>
 #include <iterator>
-#include <psapi.h>
 /**
  * <summary>
  *   Accepts an event if any of the predicates in the vector matches
  * </summary>
  */
-struct sealighter_any_of : predicates::details::predicate_base {
-    sealighter_any_of(std::vector<std::shared_ptr<predicates::details::predicate_base>> list)
+struct sealighter_any_of : krabs::predicates::details::predicate_base {
+    sealighter_any_of(std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list)
         : list_(list)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
         for (auto& item : list_) {
             if (item->operator()(record, trace_context)) {
                 return true;
@@ -24,7 +23,7 @@ struct sealighter_any_of : predicates::details::predicate_base {
         return false;
     }
 private:
-    std::vector<std::shared_ptr<predicates::details::predicate_base>> list_;
+    std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list_;
 };
 
 /**
@@ -32,12 +31,12 @@ private:
  *   Accepts an event if all of the predicates in the vector matches
  * </summary>
  */
-struct sealighter_all_of : predicates::details::predicate_base {
-    sealighter_all_of(std::vector<std::shared_ptr<predicates::details::predicate_base>> list)
+struct sealighter_all_of : krabs::predicates::details::predicate_base {
+    sealighter_all_of(std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list)
         : list_(list)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
         if (list_.empty()) {
             return false;
         }
@@ -49,7 +48,7 @@ struct sealighter_all_of : predicates::details::predicate_base {
         return true;
     }
 private:
-    std::vector<std::shared_ptr<predicates::details::predicate_base>> list_;
+    std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list_;
 };
 
 /**
@@ -57,12 +56,12 @@ private:
  *   Accepts an event only if none of the predicates in the vector match
  * </summary>
  */
-struct sealighter_none_of : predicates::details::predicate_base {
-    sealighter_none_of(std::vector<std::shared_ptr<predicates::details::predicate_base>> list)
+struct sealighter_none_of : krabs::predicates::details::predicate_base {
+    sealighter_none_of(std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list)
         : list_(list)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
         for (auto& item : list_) {
             if (item->operator()(record, trace_context)) {
                 return false;
@@ -71,7 +70,7 @@ struct sealighter_none_of : predicates::details::predicate_base {
         return true;
     }
 private:
-    std::vector<std::shared_ptr<predicates::details::predicate_base>> list_;
+    std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list_;
 };
 
 /**
@@ -80,13 +79,13 @@ private:
      But only until we see a maximum number of events.
  * </summary>
  */
-struct sealighter_max_events_id: predicates::details::predicate_base {
+struct sealighter_max_events_id: krabs::predicates::details::predicate_base {
     sealighter_max_events_id(uint64_t id_expected, uint64_t max_events)
         : id_expected_(USHORT(id_expected))
         , max_events_(max_events)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context&) const {
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context&) const {
         // Match correct id first
         if (record.EventHeader.EventDescriptor.Id == id_expected_) {
             if (count_ < max_events_) {
@@ -109,12 +108,12 @@ private:
      But only until we see a maximum number of events.
  * </summary>
  */
-struct sealighter_max_events_total : predicates::details::predicate_base {
+struct sealighter_max_events_total : krabs::predicates::details::predicate_base {
     sealighter_max_events_total(UINT64 max_events)
         : max_events_(max_events)
     {}
 
-    bool operator()(const EVENT_RECORD&, const trace_context&) const {
+    bool operator()(const EVENT_RECORD&, const krabs::trace_context&) const {
         if (count_ < max_events_) {
             // Increment  count
             count_++;
@@ -134,16 +133,16 @@ private:
 * </summary>
 */
 template <typename T>
-struct sealighter_property_is : predicates::details::predicate_base {
+struct sealighter_property_is : krabs::predicates::details::predicate_base {
     sealighter_property_is(const std::wstring& property, const T& expected)
         : property_(property)
         , expected_(expected)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const
     {
-        schema schema(record, trace_context.schema_locator);
-        parser parser(schema);
+        krabs::schema schema(record, trace_context.schema_locator);
+        krabs::parser parser(schema);
 
         try {
             return (expected_ == parser.parse<T>(property_));
@@ -165,7 +164,7 @@ private:
      Or in a STRINGA or STRINGW field
  * </summary>
  */
-struct sealighter_any_field_contains : predicates::details::predicate_base {
+struct sealighter_any_field_contains : krabs::predicates::details::predicate_base {
     sealighter_any_field_contains(std::string to_find)
         : to_findW_(convert_str_wstr_lowercase(to_find))
         , to_findA_(convert_str_str_lowercase(to_find))
@@ -173,11 +172,11 @@ struct sealighter_any_field_contains : predicates::details::predicate_base {
         , to_find_bytesW_(convert_str_wbytes_lowercase(to_find))
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
-        schema schema(record, trace_context.schema_locator);
-        parser parser(schema);
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
+        krabs::schema schema(record, trace_context.schema_locator);
+        krabs::parser parser(schema);
 
-        for (property& prop : parser.properties())
+        for (krabs::property& prop : parser.properties())
         {
             // First check the property name
             if (convert_wstr_wstr_lowercase(prop.name()).find(to_findW_) != std::string::npos) {
@@ -216,7 +215,7 @@ struct sealighter_any_field_contains : predicates::details::predicate_base {
                 case TDH_INTYPE_HEXDUMP:
                 case TDH_INTYPE_NULL:
                     // See if we can find it in the raw bytes
-                    if (check_bytes(parser.parse<binary>(prop.name()).bytes())) {
+                    if (check_bytes(parser.parse<krabs::binary>(prop.name()).bytes())) {
                         return true;
                     }
                     break;
@@ -284,27 +283,18 @@ private:
      created this event matches.
  * </summary>
  */
-struct sealighter_process_name_contains : predicates::details::predicate_base {
+struct sealighter_process_name_contains : krabs::predicates::details::predicate_base {
     sealighter_process_name_contains(std::string process_name)
         : process_name_(process_name)
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
-        schema schema(record, trace_context.schema_locator);
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
+        krabs::schema schema(record, trace_context.schema_locator);
         unsigned int pid = schema.process_id();
 
-        // As we're running as Admin, we *should* be able to open a handle to the process
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (NULL != hProcess) {
-            // Have to get the full image name, which is the full path
-            CHAR image_name_chars[1024];
-            DWORD ret = GetProcessImageFileNameA(hProcess, image_name_chars, 1024);
-            if (ret != 0) {
-                std::string image_name(image_name_chars, image_name_chars + ret);
-                if (image_name.find(process_name_) != std::string::npos) {
-                    return true;
-                }
-            }
+        auto image_name = get_process_image_name(pid);
+        if (!image_name.empty() && image_name.find(process_name_) != std::string::npos) {
+            return true;
         }
 
         return false;
@@ -319,13 +309,13 @@ private:
      created this event matches.
  * </summary>
  */
-struct sealighter_activity_id_is : predicates::details::predicate_base {
+struct sealighter_activity_id_is : krabs::predicates::details::predicate_base {
     sealighter_activity_id_is(std::string guid_match)
         : guid_match_(convert_str_guid(guid_match))
     {}
 
-    bool operator()(const EVENT_RECORD& record, const trace_context& trace_context) const {
-        schema schema(record, trace_context.schema_locator);
+    bool operator()(const EVENT_RECORD& record, const krabs::trace_context& trace_context) const {
+        krabs::schema schema(record, trace_context.schema_locator);
         if (guid_match_ == schema.activity_id()) {
             return true;
         }

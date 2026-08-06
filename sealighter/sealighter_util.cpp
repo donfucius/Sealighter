@@ -3,16 +3,13 @@
 #include <fstream>
 #include <codecvt>
 
-#include "logger.h"
 #include "sealighter_json.h"
 #include "sealighter_util.h"
 #include "../exutils/exutils.h"
 
-#define loggr (logger::Logger::GetInstance().logger())
-
 std::string convert_json_string
 (
-    json item,
+    const json& item,
     bool pretty_print
 )
 {
@@ -118,7 +115,7 @@ std::string convert_guid_str
 */
 GUID convert_wstr_guid
 (
-    std::wstring from
+    const std::wstring& from
 )
 {
     GUID to = GUID_NULL;
@@ -128,7 +125,7 @@ GUID convert_wstr_guid
 }
 GUID convert_str_guid
 (
-    std::string from
+    const std::string& from
 )
 {
     GUID to = GUID_NULL;
@@ -276,7 +273,7 @@ bool convert_bytes_bool
 
 bool file_exists
 (
-    std::string fileName
+    const std::string& fileName
 )
 {
     std::ifstream infile(fileName);
@@ -284,29 +281,19 @@ bool file_exists
 }
 
 
-#define MAX_SIZE 4096
-
-VOID log_messageA(const CHAR* format, ...)
+std::string get_process_image_name(DWORD pid)
 {
-    CHAR message[MAX_SIZE];
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) {
+        return {};
+    }
+    auto close_guard = std::unique_ptr<void, decltype(&CloseHandle)>(hProcess, CloseHandle);
 
-    va_list arg_ptr;
-    va_start(arg_ptr, format);
-    _vsnprintf_s(message, MAX_SIZE, MAX_SIZE-1, format, arg_ptr);
-    va_end(arg_ptr);
-    OutputDebugStringA(message);
-    printf("%s", message);
-	loggr.debug(message);
-}
-
-VOID log_messageW(const WCHAR* format, ...)
-{
-    WCHAR message[MAX_SIZE];
-    va_list arg_ptr;
-    va_start(arg_ptr, format);
-    _vsnwprintf_s(message, MAX_SIZE, MAX_SIZE-1, format, arg_ptr);
-    va_end(arg_ptr);
-    OutputDebugStringW(message);
-    wprintf(L"%s", message);
-    loggr.debug(message);
+    DWORD size = MAX_PATH;
+    std::string path(size, '\0');
+    if (QueryFullProcessImageNameA(hProcess, 0, path.data(), &size) && size > 0) {
+        path.resize(size);
+        return path;
+    }
+    return {};
 }

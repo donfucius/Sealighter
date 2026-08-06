@@ -8,7 +8,7 @@
 */
 std::string convert_json_string
 (
-    json item,
+    const json& item,
     bool pretty_print
 );
 
@@ -111,7 +111,7 @@ std::string convert_guid_str
 */
 GUID convert_wstr_guid
 (
-    std::wstring from
+    const std::wstring& from
 );
 
 /*
@@ -120,7 +120,7 @@ GUID convert_wstr_guid
 */
 GUID convert_str_guid
 (
-    std::string from
+    const std::string& from
 );
 
 
@@ -189,8 +189,7 @@ bool convert_bytes_bool
 */
 bool file_exists
 (
-    std::string fileName
+    const std::string& fileName
 );
 
-VOID log_messageA(const CHAR* format, ...);
-VOID log_messageW(const WCHAR* format, ...);
+std::string get_process_image_name(DWORD pid);

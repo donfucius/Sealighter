@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34601.278
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sealighter", "sealighter\sealighter.vcxproj", "{6624B356-3AA7-4A88-BDFC-B525697ECB38}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sealighter_tests", "tests\tests.vcxproj", "{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +17,10 @@ Global
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Debug|x64.Build.0 = Debug|x64
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Release|x64.ActiveCfg = Release|x64
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Release|x64.Build.0 = Release|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug|x64.ActiveCfg = Debug|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug|x64.Build.0 = Debug|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Release|x64.ActiveCfg = Release|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
