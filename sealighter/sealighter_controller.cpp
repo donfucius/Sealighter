@@ -76,7 +76,7 @@ void SealighterSession::add_filter_to_vector_property_compare_item
     std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>>& list
 )
 {
-    if (!item["name"].is_null() && !item["value"].is_null() && !item["type"].is_null()) {
+    if (!(!item.contains("name") || item["name"].is_null()) && !(!item.contains("value") || item["value"].is_null()) && !(!item.contains("type") || item["type"].is_null())) {
         std::wstring name = convert_str_wstr(item["name"].get<std::string>());
         std::string type = item["type"].get<std::string>();
         if (type == "STRINGA") {
@@ -141,9 +141,9 @@ void SealighterSession::add_filter_to_vector_property_compare
 )
 {
     std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
-    if (!root[element].is_null()) {
+    if (!(!root.contains(element) || root[element].is_null())) {
         loggr.info("        {}: {}", element.c_str(), convert_json_string(root[element], false).c_str());
-        if (root[element].is_array()) {
+        if ((root.contains(element) && root[element].is_array())) {
             for (json item : root[element]) {
                 this->add_filter_to_vector_property_compare_item<ComparerA, ComparerW>(item, list);
             }
@@ -167,7 +167,7 @@ void SealighterSession::add_filter_to_vector_property_is_item
     std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>>& list
 )
 {
-    if (!item["name"].is_null() && !item["value"].is_null() && !item["type"].is_null()) {
+    if (!(!item.contains("name") || item["name"].is_null()) && !(!item.contains("value") || item["value"].is_null()) && !(!item.contains("type") || item["type"].is_null())) {
         std::wstring name = convert_str_wstr(item["name"].get<std::string>());
         std::string type = item["type"].get<std::string>();
         if (type == "STRINGA") {
@@ -281,11 +281,11 @@ void SealighterSession::add_filter_to_vector_basic_pair
 )
 {
     std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
-    if (!root[element].is_null()) {
+    if (!(!root.contains(element) || root[element].is_null())) {
         loggr.info("        {}: {}", element.c_str(), convert_json_string(root[element], false).c_str());
-        if (root[element].is_array()) {
+        if ((root.contains(element) && root[element].is_array())) {
             for (json item : root[element]) {
-                if (!item[item1_name].is_null() && !item[item2_name].is_null()) {
+                if (!(!item.contains(item1_name) || item[item1_name].is_null()) && !(!item.contains(item2_name) || item[item2_name].is_null())) {
                     TJson1 item1 = item[item1_name].get<TJson1>();
                     TJson2 item2 = item[item2_name].get<TJson2>();
                     list.emplace_back(std::make_shared<TPred>(item1, item2));
@@ -296,7 +296,8 @@ void SealighterSession::add_filter_to_vector_basic_pair
             }
         }
         else {
-            if (!root[element][item1_name].is_null() && !root[element][item2_name].is_null()) {
+            if (root[element].contains(item1_name) && !root[element][item1_name].is_null() &&
+                root[element].contains(item2_name) && !root[element][item2_name].is_null()) {
                 TJson1 item1 = root[element][item1_name].get<TJson1>();
                 TJson2 item2 = root[element][item2_name].get<TJson2>();
                 pred_vector.emplace_back(std::make_shared<TPred>(item1, item2));
@@ -322,10 +323,10 @@ void SealighterSession::add_filter_to_vector_basic
 )
 {
     std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
-    if (!root[element].is_null()) {
+    if (!(!root.contains(element) || root[element].is_null())) {
         loggr.info("        {}: {}", element.c_str(), convert_json_string(root[element], false).c_str());
         // If a list, filter can be any of them
-        if (root[element].is_array()) {
+        if ((root.contains(element) && root[element].is_array())) {
             for (json item : root[element]) {
                 list.emplace_back(std::make_shared<TPred>(item.get<TJson1>()));
             }
@@ -363,7 +364,7 @@ int SealighterSession::add_filters_to_vector
             (json_list, "version_is", pred_vector);
 
         // Add all the property filters
-        this->add_filter_to_vector_property_is(json_list["property_is"], pred_vector);
+        this->add_filter_to_vector_property_is(json_list.value("property_is", json::array()), pred_vector);
 
         this->add_filter_to_vector_property_compare<
             kpc::equals<std::equal_to<kpa::generic_string<char>::value_type>>,
@@ -439,11 +440,10 @@ int SealighterSession::add_filters
 {
     int status = ERROR_SUCCESS;
 
-    if (json_provider["filters"].is_null() ||
-        (json_provider["filters"]["any_of"].is_null() &&
-         json_provider["filters"]["all_of"].is_null() &&
-         json_provider["filters"]["none_of"].is_null()
-        )
+    if ((!json_provider.contains("filters") || json_provider["filters"].is_null()) ||
+        (!json_provider["filters"].contains("any_of") &&
+         !json_provider["filters"].contains("all_of") &&
+         !json_provider["filters"].contains("none_of"))
        ) {
         // No filters, log everything
         loggr.info("    No event filters");
@@ -455,7 +455,7 @@ int SealighterSession::add_filters
         // Build top-level list
         // All 3 options will eventually be ANDed together
         std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> top_list;
-        if (!json_provider["filters"]["any_of"].is_null()) {
+        if (json_provider["filters"].contains("any_of") && !json_provider["filters"]["any_of"].is_null()) {
             loggr.info("    Filtering any of:");
             std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
             status = this->add_filters_to_vector(list, json_provider["filters"]["any_of"]);
@@ -463,7 +463,7 @@ int SealighterSession::add_filters
                 top_list.emplace_back(std::make_shared<sealighter_any_of>(list));
             }
         }
-        if (ERROR_SUCCESS == status && !json_provider["filters"]["all_of"].is_null()) {
+        if (ERROR_SUCCESS == status && json_provider["filters"].contains("all_of") && !json_provider["filters"]["all_of"].is_null()) {
             loggr.info("    Filtering all of:");
             std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
             status = this->add_filters_to_vector(list, json_provider["filters"]["all_of"]);
@@ -471,7 +471,7 @@ int SealighterSession::add_filters
                 top_list.emplace_back(std::make_shared<sealighter_all_of>(list));
             }
         }
-        if (ERROR_SUCCESS == status && !json_provider["filters"]["none_of"].is_null()) {
+        if (ERROR_SUCCESS == status && json_provider["filters"].contains("none_of") && !json_provider["filters"]["none_of"].is_null()) {
             loggr.info("    Filtering none of:");
             std::vector<std::shared_ptr<krabs::predicates::details::predicate_base>> list;
             status = this->add_filters_to_vector(list, json_provider["filters"]["none_of"]);
@@ -514,8 +514,9 @@ int SealighterSession::add_kernel_traces
 
     // Add any Kernel providers
     try {
+        if (json_config.contains("kernel_traces"))
         for (json json_provider : json_config["kernel_traces"]) {
-            if (json_provider["provider_name"].is_null()) {
+            if ((!json_provider.contains("provider_name") || json_provider["provider_name"].is_null())) {
                 loggr.info("Invalid Provider, missing provider name");
                 status = SEALIGHTER_ERROR_PARSE_KERNEL_PROVIDER;
                 break;
@@ -566,7 +567,7 @@ int SealighterSession::add_kernel_traces
             }
 
             // Create context with trace name
-            if (json_provider["trace_name"].is_null()) {
+            if ((!json_provider.contains("trace_name") || json_provider["trace_name"].is_null())) {
                 loggr.info("Invalid Provider, missing trace name");
                 status = SEALIGHTER_ERROR_PARSE_KERNEL_PROVIDER;
                 break;
@@ -575,7 +576,8 @@ int SealighterSession::add_kernel_traces
             std::string trace_name = json_provider["trace_name"].get<std::string>();
             auto sealighter_context =
                 std::make_shared<sealighter_context_t>(trace_name, false);
-            for (json json_buffers : json_provider["buffers"]) {
+            if (json_provider.contains("buffers"))
+        for (json json_buffers : json_provider["buffers"]) {
                 auto event_id = json_buffers["event_id"].get<std::uint32_t>();
                 auto max = json_buffers["max_before_buffering"].get<std::uint32_t>();
                 auto buffer_list = event_buffer_list_t(event_id, max);
@@ -624,18 +626,19 @@ int SealighterSession::add_user_traces
     user_session_->set_trace_properties(&session_properties);
     try {
         // Parse the Usermode Providers
+        if (json_config.contains("user_traces"))
         for (json json_provider : json_config["user_traces"]) {
             GUID provider_guid;
             std::unique_ptr<krabs::provider<>> pNew_provider;
             std::wstring provider_name;
             std::string trace_name;
-            if (json_provider["provider_name"].is_null()) {
+            if ((!json_provider.contains("provider_name") || json_provider["provider_name"].is_null())) {
                 loggr.info("Invalid Provider");
                 status = SEALIGHTER_ERROR_PARSE_USER_PROVIDER;
                 break;
             }
 
-            if (json_provider["trace_name"].is_null()) {
+            if ((!json_provider.contains("trace_name") || json_provider["trace_name"].is_null())) {
                 loggr.info("Invalid Provider, missing trace name");
                 status = SEALIGHTER_ERROR_PARSE_KERNEL_PROVIDER;
                 break;
@@ -665,23 +668,23 @@ int SealighterSession::add_user_traces
 
             // If no keywords_all or keywords_any is set
             // then set a default 'match anything'
-            if (json_provider["keywords_all"].is_null() && json_provider["keywords_any"].is_null()) {
+            if ((!json_provider.contains("keywords_all") || json_provider["keywords_all"].is_null()) && (!json_provider.contains("keywords_any") || json_provider["keywords_any"].is_null())) {
                 loggr.info("    Keywords: All");
             }
             else {
-                if (!json_provider["keywords_all"].is_null()) {
+                if (!(!json_provider.contains("keywords_all") || json_provider["keywords_all"].is_null())) {
                     uint64_t data = json_provider["keywords_all"].get<std::uint64_t>();
                     loggr.info("    Keywords All: 0x{:x}", data);
                     pNew_provider->all(data);
                 }
 
-                if (!json_provider["keywords_any"].is_null()) {
+                if (!(!json_provider.contains("keywords_any") || json_provider["keywords_any"].is_null())) {
                     uint64_t data = json_provider["keywords_any"].get<std::uint64_t>();
                     loggr.info("    Keywords Any: 0x{:x}", data);
                     pNew_provider->any(data);
                 }
             }
-            if (!json_provider["level"].is_null()) {
+            if (!(!json_provider.contains("level") || json_provider["level"].is_null())) {
                 uint64_t data = json_provider["level"].get<std::uint64_t>();
                 loggr.info("    Level: 0x{:x}", data);
                 pNew_provider->level(data);
@@ -691,7 +694,7 @@ int SealighterSession::add_user_traces
                 pNew_provider->level(0xff);
             }
 
-            if (!json_provider["trace_flags"].is_null()) {
+            if (!(!json_provider.contains("trace_flags") || json_provider["trace_flags"].is_null())) {
                 uint64_t data = json_provider["trace_flags"].get<std::uint64_t>();
                 loggr.info("    Trace Flags: 0x{:x}", data);
                 pNew_provider->trace_flags(data);
@@ -699,7 +702,7 @@ int SealighterSession::add_user_traces
 
             // Check if we want a stacktrace
             // This is just a helper option, you could also set this in the trace_flags
-            if (!json_provider["report_stacktrace"].is_null() && json_provider["report_stacktrace"].get<bool>()) {
+            if (!(!json_provider.contains("report_stacktrace") || json_provider["report_stacktrace"].is_null()) && json_provider["report_stacktrace"].get<bool>()) {
                 // Add the stacktrace trace flag
                 pNew_provider->trace_flags(pNew_provider->trace_flags() | EVENT_ENABLE_PROPERTY_STACK_TRACE);
             }
@@ -708,7 +711,7 @@ int SealighterSession::add_user_traces
 
             // Check if we're dumping the raw event, or attempting to parse it
             bool dump_raw_event = false;
-            if (!json_provider["dump_raw_event"].is_null()) {
+            if (!(!json_provider.contains("dump_raw_event") || json_provider["dump_raw_event"].is_null())) {
                 dump_raw_event = json_provider["dump_raw_event"].get<bool>();
                 if (dump_raw_event) {
                     loggr.info("    Recording raw events");
@@ -717,11 +720,13 @@ int SealighterSession::add_user_traces
 
             auto sealighter_context =
                 std::make_shared<sealighter_context_t>(trace_name, dump_raw_event);
-            for (json json_buffers : json_provider["buffers"]) {
+            if (json_provider.contains("buffers"))
+        for (json json_buffers : json_provider["buffers"]) {
                 auto event_id = json_buffers["event_id"].get<std::uint32_t>();
                 auto max = json_buffers["max_before_buffering"].get<std::uint32_t>();
                 auto buffer_list = event_buffer_list_t(event_id, max);
-                for (json json_buff_prop : json_buffers["properties_to_match"]) {
+                if (json_buffers.contains("properties_to_match"))
+        for (json json_buff_prop : json_buffers["properties_to_match"]) {
                     buffer_list.properties_to_compare.push_back(json_buff_prop.get<std::string>());
                 }
 
@@ -780,15 +785,15 @@ int SealighterSession::parse_config(const std::string& config_string)
         session_properties.LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_INDEPENDENT_SESSION_MODE;
 
         // Parse the config json for any custom properties
-        json json_props = json_config["session_properties"];
+        json json_props = json_config.contains("session_properties") ? json_config["session_properties"] : json::object();
         if (!json_props.is_null())
         {
-            if (!json_props["session_name"].is_null()) {
+            if (!(!json_props.contains("session_name") || json_props["session_name"].is_null())) {
                 session_name = convert_str_wstr(json_props["session_name"].get<std::string>());
                 loggr.info("Session Name: {}", convert_wstr_str(session_name));
             }
 
-            if (!json_props["buffer_size"].is_null()) {
+            if (!(!json_props.contains("buffer_size") || json_props["buffer_size"].is_null())) {
                 session_properties.BufferSize = json_props["buffer_size"].get<std::uint32_t>();
                 if (session_properties.BufferSize < 1 || session_properties.BufferSize > 1024) {
                     loggr.info("buffer_size must be between 1 and 1024 KB");
@@ -796,7 +801,7 @@ int SealighterSession::parse_config(const std::string& config_string)
                 }
             }
 
-            if (ERROR_SUCCESS == status && !json_props["minimum_buffers"].is_null()) {
+            if (ERROR_SUCCESS == status && !(!json_props.contains("minimum_buffers") || json_props["minimum_buffers"].is_null())) {
                 session_properties.MinimumBuffers =
                     json_props["minimum_buffers"].get<std::uint32_t>();
                 if (session_properties.MinimumBuffers < 2 || session_properties.MinimumBuffers > 10000) {
@@ -805,7 +810,7 @@ int SealighterSession::parse_config(const std::string& config_string)
                 }
             }
 
-            if (ERROR_SUCCESS == status && !json_props["maximum_buffers"].is_null()) {
+            if (ERROR_SUCCESS == status && !(!json_props.contains("maximum_buffers") || json_props["maximum_buffers"].is_null())) {
                 session_properties.MaximumBuffers =
                     json_props["maximum_buffers"].get<std::uint32_t>();
                 if (session_properties.MaximumBuffers < session_properties.MinimumBuffers ||
@@ -815,7 +820,7 @@ int SealighterSession::parse_config(const std::string& config_string)
                 }
             }
 
-            if (ERROR_SUCCESS == status && !json_props["flush_timer"].is_null()) {
+            if (ERROR_SUCCESS == status && !(!json_props.contains("flush_timer") || json_props["flush_timer"].is_null())) {
                 session_properties.FlushTimer =
                     json_props["flush_timer"].get<std::uint32_t>();
                 if (session_properties.FlushTimer < 1 || session_properties.FlushTimer > 3600) {
@@ -824,7 +829,7 @@ int SealighterSession::parse_config(const std::string& config_string)
                 }
             }
 
-            if (!json_props["output_format"].is_null()) {
+            if (!(!json_props.contains("output_format") || json_props["output_format"].is_null())) {
                 std::string format = json_props["output_format"].get<std::string>();
                 if ("stdout" == format) {
                     this->set_output_format(Output_format::output_stdout);
@@ -833,7 +838,7 @@ int SealighterSession::parse_config(const std::string& config_string)
                     this->set_output_format(Output_format::output_event_log);
                 }
                 else if ("file" == format) {
-                    if (json_props["output_filename"].is_null()) {
+                    if ((!json_props.contains("output_filename") || json_props["output_filename"].is_null())) {
                         loggr.info("When output_format == 'file', also set 'output_filename'");
                         status = SEALIGHTER_ERROR_OUTPUT_FILE;
                     }
@@ -849,11 +854,11 @@ int SealighterSession::parse_config(const std::string& config_string)
                 loggr.info("Outputs: {}", format.c_str());
             }
 
-            if (!json_props["buffering_timeout_seconds"].is_null()) {
+            if (!(!json_props.contains("buffering_timeout_seconds") || json_props["buffering_timeout_seconds"].is_null())) {
                 auto timeout = json_props["buffering_timeout_seconds"].get<std::uint32_t>();
                 this->set_buffer_lists_timeout(timeout);
             }
-            else if (!json_props["buffering_timout_seconds"].is_null()) {
+            else if (!(!json_props.contains("buffering_timout_seconds") || json_props["buffering_timout_seconds"].is_null())) {
                 loggr.info("Warning: 'buffering_timout_seconds' is deprecated, use 'buffering_timeout_seconds'");
                 auto timeout = json_props["buffering_timout_seconds"].get<std::uint32_t>();
                 this->set_buffer_lists_timeout(timeout);
@@ -867,17 +872,17 @@ int SealighterSession::parse_config(const std::string& config_string)
     }
 
     if (ERROR_SUCCESS == status) {
-        if (json_config["user_traces"].is_null() && json_config["kernel_traces"].is_null()) {
+        if ((!json_config.contains("user_traces") || json_config["user_traces"].is_null()) && (!json_config.contains("kernel_traces") || json_config["kernel_traces"].is_null())) {
             loggr.info("No User or Kernel providers in config file");
             status = SEALIGHTER_ERROR_PARSE_NO_PROVIDERS;
         }
         else {
-            if (!json_config["user_traces"].is_null()) {
+            if (!(!json_config.contains("user_traces") || json_config["user_traces"].is_null())) {
                 status = this->add_user_traces(json_config, session_properties, session_name);
             }
 
             // Add kernel providers if needed
-            if (ERROR_SUCCESS == status && !json_config["kernel_traces"].is_null()) {
+            if (ERROR_SUCCESS == status && !(!json_config.contains("kernel_traces") || json_config["kernel_traces"].is_null())) {
                 status = this->add_kernel_traces(json_config, session_properties);
             }
         }
@@ -962,10 +967,11 @@ int SealighterSession::run
     // Create a thread to wait for the event StopSealighter
     auto waitForStop = std::jthread([this]() { this->WaitForStopEvent(); });
 
-    // Add ctrl+C handler to make sure we stop the trace
+    // Add ctrl+C handler for graceful shutdown when running standalone
+    // with a console. When launched by hsagent (no console, CREATE_SUSPENDED),
+    // this fails — shutdown is handled via the Local\StopSealighter event.
     if (!SetConsoleCtrlHandler(crl_c_handler, TRUE)) {
-        loggr.info("failed to set ctrl-c handler");
-        return SEALIGHTER_ERROR_CTRL_C_REGISTER;
+        loggr.info("warning: failed to set ctrl-c handler (no console — shutdown via StopSealighter event)");
     }
 
     // Parse config file

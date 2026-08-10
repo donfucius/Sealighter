@@ -33,11 +33,7 @@ static std::string get_log_path()
 /*
     Main entrypoint
 */
-int main
-(
-    int argc,
-    char* argv[]
-)
+int main(int argc, char* argv[])
 {
     auto log_path = get_log_path();
     logger::Logger::GetInstance().init(APP_NAME, log_path);

@@ -10,15 +10,20 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
+		Debug-NoASan|x64 = Debug-NoASan|x64
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Debug|x64.ActiveCfg = Debug|x64
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Debug|x64.Build.0 = Debug|x64
+		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Debug-NoASan|x64.ActiveCfg = Debug-NoASan|x64
+		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Debug-NoASan|x64.Build.0 = Debug-NoASan|x64
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Release|x64.ActiveCfg = Release|x64
 		{6624B356-3AA7-4A88-BDFC-B525697ECB38}.Release|x64.Build.0 = Release|x64
 		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug|x64.ActiveCfg = Debug|x64
 		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug|x64.Build.0 = Debug|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug-NoASan|x64.ActiveCfg = Debug-NoASan|x64
+		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Debug-NoASan|x64.Build.0 = Debug-NoASan|x64
 		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Release|x64.ActiveCfg = Release|x64
 		{A3B7C8D1-2E4F-4A6B-9C0D-1E2F3A4B5C6D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
