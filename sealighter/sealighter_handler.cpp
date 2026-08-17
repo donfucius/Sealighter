@@ -463,13 +463,17 @@ void SealighterSession::buffering_thread()
 {
     std::mutex thread_mutex;
     std::unique_lock<std::mutex> lock(thread_mutex);
-    auto time_point = std::chrono::system_clock::now() +
-        std::chrono::seconds(buffer_lists_timeout_seconds_);
     while (!buffer_thread_stop_) {
-        while (buffer_list_con_var_.wait_until(lock, time_point) == std::cv_status::timeout) {
+        auto time_point = std::chrono::system_clock::now() +
+            std::chrono::seconds(buffer_lists_timeout_seconds_);
+        // wait_until returns timeout -> flush; returns no_timeout (notified)
+        // -> fall through to outer loop which re-checks buffer_thread_stop_.
+        // NB: must not nest another while here -- if notify_one() is called
+        // while we're inside flush_buffered_lists() the notification is lost,
+        // and a nested while on timeout would never re-check the stop flag,
+        // hanging stop_bufferring()'s join() forever.
+        if (buffer_list_con_var_.wait_until(lock, time_point) == std::cv_status::timeout) {
             flush_buffered_lists();
-            time_point = std::chrono::system_clock::now() +
-                std::chrono::seconds(buffer_lists_timeout_seconds_);
         }
     }
 

@@ -917,10 +917,14 @@ void SealighterSession::run_trace(krabs::trace<T>* trace)
 
 
 /*
-    Stop any running trace
+    Stop any running trace.
+    Idempotent: safe to call multiple times (from stop event, Ctrl+C, destructor).
 */
 void SealighterSession::stop()
 {
+    if (stopped_.exchange(true)) {
+        return;  // Already stopped
+    }
     if (user_session_) {
         user_session_->stop();
     }
@@ -937,9 +941,14 @@ void SealighterSession::WaitForStopEvent()
         stop_event_error_ = SEALIGHTER_ERROR_WAIT_STOP;
         loggr.info("Waiting for the StopSealighter event failed.");
     } else {
-        loggr.info("StopSealighter event received. Stopped.");
+        loggr.info("StopSealighter event received, stopping traces...");
     }
-    this->stop();
+    try {
+        this->stop();
+    }
+    catch (const std::exception& e) {
+        loggr.info("Error stopping trace: {}", e.what());
+    }
 }
 
 // -------------------------
@@ -964,16 +973,6 @@ int SealighterSession::run
     // Set the active session for the Ctrl+C handler
     g_active_session = this;
 
-    // Create a thread to wait for the event StopSealighter
-    auto waitForStop = std::jthread([this]() { this->WaitForStopEvent(); });
-
-    // Add ctrl+C handler for graceful shutdown when running standalone
-    // with a console. When launched by hsagent (no console, CREATE_SUSPENDED),
-    // this fails — shutdown is handled via the Local\StopSealighter event.
-    if (!SetConsoleCtrlHandler(crl_c_handler, TRUE)) {
-        loggr.info("warning: failed to set ctrl-c handler (no console — shutdown via StopSealighter event)");
-    }
-
     // Parse config file
     status = this->parse_config(config_string);
     if (ERROR_SUCCESS != status) {
@@ -985,40 +984,72 @@ int SealighterSession::run
         return SEALIGHTER_ERROR_NO_SESSION_CREATED;
     }
 
+    // Create a thread to wait for the event StopSealighter
+    auto waitForStop = std::jthread([this]() { this->WaitForStopEvent(); });
+
+    // Add ctrl+C handler for graceful shutdown when running standalone
+    // with a console. When launched by hsagent (no console, CREATE_SUSPENDED),
+    // this fails — shutdown is handled via the Local\StopSealighter event.
+    if (!SetConsoleCtrlHandler(crl_c_handler, TRUE)) {
+        loggr.info("warning: failed to set ctrl-c handler (no console — shutdown via StopSealighter event)");
+    }
+
     // Setup Buffering thread if needed
     this->start_bufferring();
 
-    // Start Trace we've configured
-    // Don't run multithreaded if we don't have to
-    if (user_session_ && !kernel_session_) {
-        loggr.info("Starting User Trace...");
-        loggr.info("-----------------------------------------");
-        SetSealighterStartedEvent();
-        this->run_trace(user_session_.get());
-    }
-    else if (!user_session_ && kernel_session_) {
-        loggr.info("Starting Kernel Trace...");
-        loggr.info("-----------------------------------------");
-        SetSealighterStartedEvent();
-        this->run_trace(kernel_session_.get());
-    }
-    else {
-        // Have to multi-thread it
-        loggr.info("Starting User and Kernel Traces...");
-        loggr.info("-----------------------------------------");
-        SetSealighterStartedEvent();
-        std::thread user_thread = std::thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
-        std::thread kernel_thread = std::thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
+    // Ensure cleanup always runs, even if run_trace throws
+    try {
+        // Start Trace we've configured
+        // Don't run multithreaded if we don't have to
+        if (user_session_ && !kernel_session_) {
+            loggr.info("Starting User Trace...");
+            loggr.info("-----------------------------------------");
+            SetSealighterStartedEvent();
+            this->run_trace(user_session_.get());
+        }
+        else if (!user_session_ && kernel_session_) {
+            loggr.info("Starting Kernel Trace...");
+            loggr.info("-----------------------------------------");
+            SetSealighterStartedEvent();
+            this->run_trace(kernel_session_.get());
+        }
+        else {
+            // Have to multi-thread it
+            loggr.info("Starting User and Kernel Traces...");
+            loggr.info("-----------------------------------------");
+            SetSealighterStartedEvent();
+            std::thread user_thread = std::thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
+            std::thread kernel_thread = std::thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
 
-        // Call join, blocking until both have shut down
-        user_thread.join();
-        kernel_thread.join();
+            // Call join, blocking until both have shut down
+            user_thread.join();
+            kernel_thread.join();
+        }
     }
+    catch (const std::exception& e) {
+        loggr.info("Trace ended with error: {}", e.what());
+        status = SEALIGHTER_ERROR_TRACE_STOP;
+    }
+
+    // All trace processing has finished (ProcessTrace returned on every
+    // trace thread), so the traces have truly stopped now.
+    loggr.info("All traces stopped, cleaning up...");
 
     // Teardown and cleanup
     this->stop_bufferring();
     this->teardown_logger_file();
     (void)EventUnregisterSealighter();
+
+    // Signal the stop event so the WaitForStopEvent jthread can exit.
+    // Without this, Ctrl+C shutdown leaves the jthread blocked on Wait()
+    // and the jthread destructor's join() hangs the process.
+    try {
+        winxx::NamedEvent<wchar_t> evtStop{ EVENT_STOP_SEALIGHTER.data(), EVENT_MODIFY_STATE, FALSE };
+        evtStop.Set();
+    }
+    catch (...) {
+        // Event may not exist if jthread hasn't created it yet — safe to ignore
+    }
 
     if (stop_event_error_.load() != 0) {
         return stop_event_error_.load();

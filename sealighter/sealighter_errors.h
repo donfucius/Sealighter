@@ -42,3 +42,6 @@
 
 // Failed to wait for the stop event
 #define SEALIGHTER_ERROR_WAIT_STOP 15
+
+// Trace stopped with an unexpected error
+#define SEALIGHTER_ERROR_TRACE_STOP 16

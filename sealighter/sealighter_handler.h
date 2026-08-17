@@ -63,7 +63,7 @@ enum Output_format
 class SealighterSession {
 public:
     SealighterSession() = default;
-    ~SealighterSession() = default;
+    ~SealighterSession() { stop(); };  // Ensure trace sessions are stopped
 
     SealighterSession(const SealighterSession&) = delete;
     SealighterSession& operator=(const SealighterSession&) = delete;
@@ -186,4 +186,5 @@ private:
     std::vector<std::unique_ptr<krabs::provider<>>> user_providers_;
 
     std::atomic<int> stop_event_error_{ 0 };
+    std::atomic_bool stopped_{ false };  // Idempotent guard for stop()
 };
