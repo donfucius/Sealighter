@@ -1018,10 +1018,10 @@ int SealighterSession::run
             loggr.info("Starting User and Kernel Traces...");
             loggr.info("-----------------------------------------");
             SetSealighterStartedEvent();
-            std::thread user_thread = std::thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
-            std::thread kernel_thread = std::thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
+            std::jthread user_thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
+            std::jthread kernel_thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
 
-            // Call join, blocking until both have shut down
+            // jthread auto-joins on destruction; join here for clarity
             user_thread.join();
             kernel_thread.join();
         }
