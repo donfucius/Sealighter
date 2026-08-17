@@ -400,7 +400,7 @@ int SealighterSession::setup_logger_file
     const std::string& filename
 )
 {
-    outfile_.open(filename.c_str(), std::ios::out | std::ios::app);
+    outfile_.open(filename.c_str(), std::ios::out | std::ios::trunc);
     if (outfile_.good()) {
         return ERROR_SUCCESS;
     }
