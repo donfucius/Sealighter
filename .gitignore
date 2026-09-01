@@ -2,6 +2,7 @@
 x64/
 packages/
 sealighter/x64
+docs/superpowers
 *.vcxproj.user
 
 # Some testing might create this file:
