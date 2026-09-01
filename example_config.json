@@ -1,18 +1,156 @@
 {
-    "session_properties": {
-        "session_name": "Sealighter-Trace",
-        "output_format": "stdout"
+  "session_properties": {
+    "session_name": "Sealighter-Trace",
+    "output_format": "file",
+    "output_filename": "C:\\notouchme\\artifacts\\log\\etw.log",
+    "buffer_size": 1024,
+    "minimum_buffers": 64,
+    "maximum_buffers": 1000,
+    "flush_timer": 5
+  },
+  "user_traces": [
+    {
+      "trace_name": "filecap",
+      "provider_name": "{9f3c1b5a-6e24-4c07-8a51-d0e4f2b7c913}"
     },
-    "user_traces": [
-        {
-            "trace_name": "ProcTrace01",
-            "provider_name": "Microsoft-Windows-Kernel-Process",
-            "keywords_any": 16,
-            "filters": {
-                "any_of": {
-                    "event_id_is": [ 1, 2 ]
-                }
-            }
+    {
+      "trace_name": "kernel_process",
+      "provider_name": "{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}",
+      "keywords_any": 112
+    },
+    {
+      "trace_name": "kernel_network",
+      "provider_name": "{7dd42a49-5329-4832-8dfd-43d979153a88}",
+      "keywords_any": 48
+    },
+    {
+      "trace_name": "wininet",
+      "provider_name": "{43d1a55c-76d6-4f7e-995c-64c711e5cafe}",
+      "keywords_any": 22,
+      "report_stacktrace": true
+    },
+    {
+      "trace_name": "winsock_afd",
+      "provider_name": "{e53c6823-7bb8-44bb-90dc-3f86090d48a6}",
+      "keywords_any": 14,
+      "report_stacktrace": true
+    },
+    {
+      "trace_name": "kernel_audit_api",
+      "provider_name": "{E02A841C-75A3-4FA7-AFC8-AE09CF9B7F23}",
+      "filters": {
+        "none_of": {
+          "event_id_is": [5, 6]
         }
-    ]
+      }
+    },
+    {
+      "trace_name": "powershell",
+      "provider_name": "{A0C1853B-5C40-4B15-8766-3CF1C58F985A}",
+      "filters": {
+        "any_of": {
+          "event_id_is": [4103, 4104]
+        }
+      }
+    },
+    {
+      "trace_name": "threat_intel",
+      "provider_name": "{f4e1897c-bb5d-5668-f1d8-040f4d8dd344}",
+      "filters": {
+        "none_of": {
+          "event_id_is": [11]
+        }
+      },
+      "report_stacktrace": true
+    },
+    {
+      "trace_name": "sysmon",
+      "provider_name": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"
+    },
+    {
+      "trace_name": "hssec",
+      "provider_name": "{331B2B81-1BAB-46A5-928E-E3B49193EBBD}"
+    },
+    {
+      "trace_name": "Kernel_file",
+      "provider_name": "{edd08927-9cc4-4e65-b970-c2560fb5c289}",
+      "keywords_any": 3072
+    },
+    {
+      "trace_name": "win32k",
+      "provider_name": "{8c416c79-d49b-4f01-a467-e56d3aa8234c}",
+      "filters": {
+        "any_of": {
+          "event_id_is": 1002
+        }
+      }
+    },
+    {
+      "trace_name": "task_scheduler",
+      "provider_name": "{de7b24ea-73c8-4a09-985d-5bdadcfa9017}"
+    },
+    {
+      "trace_name": "wmi",
+      "provider_name": "{1418ef04-b0b4-4623-bf7e-d74ab47bbdaa}",
+      "filters": {
+        "any_of": {
+          "event_id_is": [11, 23]
+        }
+      }
+    },
+    {
+      "trace_name": "hsamsi",
+      "provider_name": "{C7403604-A6CA-4B90-A34D-9A7B3DC76775}"
+    },
+    {
+      "trace_name": "dynomon",
+      "provider_name": "{3e9f2fe0-56ce-45cc-89ba-7edae9d65618}"
+    },
+    {
+      "trace_name": "com_perf",
+      "provider_name": "{b8d6861b-d20f-4eec-bbae-87e0dd80602b}",
+      "keywords_any": 4611686018427387904,
+      "filters": {
+        "none_of": {
+          "property_is": [
+            {
+              "name": "TargetInterface",
+              "value": "{00000134-0000-0000-C000-000000000046}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{00000136-0000-0000-C000-000000000046}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{6D5140C1-7436-11CE-8034-00AA006009FA}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{618736E0-3C3D-11CF-810C-00AA00389B71}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{75207394-23F2-4396-85F0-8FDB879ED0ED}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{7852B78D-1CFD-41C1-A615-9C0C85960B5F}",
+              "type": "GUID"
+            },
+            {
+              "name": "TargetInterface",
+              "value": "{365DE52E-EE7E-4975-AEC8-06588234BB3C}",
+              "type": "GUID"
+            }
+          ]
+        }
+      }
+    }
+  ]
 }
