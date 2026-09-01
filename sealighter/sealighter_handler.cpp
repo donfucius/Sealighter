@@ -85,6 +85,61 @@ void SealighterSession::threaded_write_file_ln
 }
 
 
+void SealighterSession::copy_event_record_
+(
+    const EVENT_RECORD& record,
+    const krabs::trace_context& trace_ctx,
+    std::shared_ptr<struct sealighter_context_t> context,
+    raw_event_t& out
+)
+{
+    out.record = record;
+    out.context = context;
+    out.trace_ctx = &trace_ctx;
+
+    // Deep-copy UserData
+    if (record.UserData != nullptr && record.UserDataLength > 0) {
+        out.user_data.assign(
+            reinterpret_cast<const BYTE*>(record.UserData),
+            reinterpret_cast<const BYTE*>(record.UserData) + record.UserDataLength);
+        out.record.UserData = out.user_data.data();
+    }
+    else {
+        out.record.UserData = nullptr;
+        out.record.UserDataLength = 0;
+    }
+
+    // Deep-copy extended data payloads and fix up DataPtrs
+    if (record.ExtendedData != nullptr && record.ExtendedDataCount > 0) {
+        out.extended_items.assign(
+            record.ExtendedData,
+            record.ExtendedData + record.ExtendedDataCount);
+        out.extended_payloads.clear();
+
+        for (auto& item : out.extended_items) {
+            if (item.DataSize > 0 && item.DataPtr != 0) {
+                size_t offset = out.extended_payloads.size();
+                out.extended_payloads.resize(offset + item.DataSize);
+                memcpy(
+                    out.extended_payloads.data() + offset,
+                    reinterpret_cast<const void*>(item.DataPtr),
+                    item.DataSize);
+                item.DataPtr = reinterpret_cast<ULONGLONG>(
+                    out.extended_payloads.data() + offset);
+            }
+            else {
+                item.DataPtr = 0;
+            }
+        }
+        out.record.ExtendedData = out.extended_items.data();
+    }
+    else {
+        out.record.ExtendedData = nullptr;
+        out.record.ExtendedDataCount = 0;
+    }
+}
+
+
 static void parse_extended_data(const EVENT_RECORD& record, json& json_event)
 {
     if (record.ExtendedDataCount == 0) {
@@ -317,6 +372,75 @@ void SealighterSession::output_json_event
     }
 }
 
+void SealighterSession::process_raw_event_(raw_event_t& raw)
+{
+    try {
+        krabs::schema schema(raw.record, raw.trace_ctx->schema_locator);
+        json json_event = parse_event_to_json(
+            raw.record,
+            *raw.trace_ctx,
+            raw.context,
+            schema);
+
+        bool buffered = false;
+        std::string trace_name = raw.context->trace_name;
+
+        {
+            std::lock_guard<std::mutex> lock(buffer_lists_mutex_);
+            if (buffer_lists_.size() > 0 &&
+                buffer_lists_.find(trace_name) != buffer_lists_.end()) {
+                for (event_buffer_list_t& buffer : buffer_lists_[trace_name]) {
+                    if (buffer.event_id != (uint32_t)schema.event_id()) {
+                        continue;
+                    }
+                    if (buffer.event_count < buffer.max_before_buffering) {
+                        buffer.event_count += 1;
+                        break;
+                    }
+
+                    bool matched_event = false;
+                    for (json& json_event_buffered : buffer.json_event_buffered) {
+                        bool matched_field = true;
+                        for (std::string prop_to_compare : buffer.properties_to_compare) {
+                            auto field_event = convert_json_string(
+                                json_event["properties"][prop_to_compare], false);
+                            auto field_buffered = convert_json_string(
+                                json_event_buffered["properties"][prop_to_compare], false);
+                            if (field_event != field_buffered) {
+                                matched_field = false;
+                                break;
+                            }
+                        }
+                        if (matched_field) {
+                            auto old_count = json_event_buffered["header"]["buffered_count"]
+                                .get<std::uint32_t>();
+                            json_event_buffered["header"]["buffered_count"] = old_count + 1;
+                            matched_event = true;
+                        }
+                    }
+                    if (!matched_event) {
+                        json_event["header"]["buffered_count"] = 1;
+                        buffer.json_event_buffered.push_back(json_event);
+                    }
+                    buffered = true;
+                    break;
+                }
+            }
+        }
+
+        if (!buffered) {
+            output_json_event(json_event);
+        }
+    }
+    catch (const std::exception& e) {
+        loggr.info("Error processing queued event: {}", e.what());
+    }
+    catch (...) {
+        loggr.info("Unknown error processing queued event");
+    }
+}
+
+
 void SealighterSession::handle_event_context
 (
     const EVENT_RECORD& record,
@@ -324,63 +448,9 @@ void SealighterSession::handle_event_context
     std::shared_ptr<struct sealighter_context_t> sealighter_context
 )
 {
-    json json_event;
-    krabs::schema schema(record, trace_context.schema_locator);
-    bool buffered = false;
-
-    std::string trace_name = sealighter_context->trace_name;
-    json_event = parse_event_to_json(record, trace_context, sealighter_context, schema);
-
-    // Only care about event buffering if required
-    {
-        std::lock_guard<std::mutex> lock(buffer_lists_mutex_);
-        if (buffer_lists_.size() > 0 && buffer_lists_.find(trace_name) != buffer_lists_.end()) {
-            for (event_buffer_list_t& buffer : buffer_lists_[trace_name]) {
-                if (buffer.event_id != (uint32_t)schema.event_id()) {
-                    continue;
-                }
-                if (buffer.event_count < buffer.max_before_buffering) {
-                    // Increment counter but report event
-                    buffer.event_count += 1;
-                    break;
-                }
-
-                // We're buffering. See if we already have the matching event
-                bool matched_event = false;
-                for (json& json_event_buffered : buffer.json_event_buffered) {
-                    bool matched_field = true;
-                    for (std::string prop_to_compare: buffer.properties_to_compare) {
-                        auto field_event = convert_json_string(json_event["properties"][prop_to_compare], false);
-                        auto field_buffered = convert_json_string(json_event_buffered["properties"][prop_to_compare], false);
-                        if (field_event != field_buffered) {
-                            // Not a match
-                            matched_field = false;
-                            break;
-                        }
-                    }
-                    if (matched_field) {
-                        // Matched, increase event count
-                        auto old_count = json_event_buffered["header"]["buffered_count"].get<std::uint32_t>();
-                        json_event_buffered["header"]["buffered_count"] = old_count + 1;
-                        matched_event = true;
-                    }
-                }
-                if (!matched_event) {
-                    // Event wasn't in the list, add it
-                    json_event["header"]["buffered_count"] = 1;
-                    buffer.json_event_buffered.push_back(json_event);
-                }
-                // As we're buffering don't report event
-                buffered = true;
-                break;
-            }
-        }
-    }
-
-    // Report event only if not buffering
-    if (!buffered) {
-        output_json_event(json_event);
-    }
+    auto raw = std::make_unique<raw_event_t>();
+    copy_event_record_(record, trace_context, sealighter_context, *raw);
+    event_queue_.enqueue(std::move(raw));
 }
 
 
@@ -394,6 +464,97 @@ void SealighterSession::handle_event
     auto dummy_context = std::make_shared<struct sealighter_context_t>("", false);
     this->handle_event_context(record, trace_context, dummy_context);
 }
+
+
+void SealighterSession::event_worker_thread_()
+{
+    using namespace std::chrono;
+    auto next_log = steady_clock::now() + event_worker_log_interval_;
+    std::uint64_t last_logged_drops = 0;
+    std::uint64_t last_logged_kernel = 0;
+
+    while (!event_worker_stop_flag_) {
+        bool timed_out = false;
+        auto ev = event_queue_.dequeue(
+            event_worker_stop_flag_,
+            event_worker_log_interval_,
+            timed_out);
+
+        if (ev) {
+            process_raw_event_(*ev);
+        }
+
+        if (timed_out || steady_clock::now() >= next_log) {
+            query_and_update_kernel_lost_();
+            std::uint64_t q = event_queue_.dropped();
+            std::uint64_t k = kernel_events_lost_.load();
+            if (q != last_logged_drops || k != last_logged_kernel) {
+                loggr.info("event_queue_drops={} kernel_events_lost={}", q, k);
+                last_logged_drops = q;
+                last_logged_kernel = k;
+            }
+            next_log = steady_clock::now() + event_worker_log_interval_;
+        }
+    }
+
+    // Drain remaining events before joining
+    while (auto ev = event_queue_.try_dequeue()) {
+        process_raw_event_(*ev);
+    }
+}
+
+
+void SealighterSession::start_event_processing()
+{
+    if (!event_worker_stop_flag_.load() && !event_worker_thread_handle_.joinable()) {
+        event_worker_thread_handle_ = std::thread(&SealighterSession::event_worker_thread_, this);
+    }
+}
+
+
+void SealighterSession::stop_event_processing()
+{
+    if (event_worker_thread_handle_.joinable()) {
+        event_worker_stop_flag_ = true;
+        event_queue_.enqueue(nullptr);
+        event_worker_thread_handle_.join();
+    }
+}
+
+
+template <typename T>
+void SealighterSession::query_trace_lost_(krabs::trace<T>* trace)
+{
+    if (!trace) return;
+    try {
+        auto stats = trace->query_stats();
+        std::uint64_t current = stats.eventsLost;
+        std::uint64_t prev = kernel_events_lost_.load();
+        while (current > prev && !kernel_events_lost_.compare_exchange_weak(prev, current)) {}
+    }
+    catch (const std::exception& e) {
+        // Session may already be stopped; ignore query failures.
+        (void)e;
+    }
+}
+
+
+void SealighterSession::query_and_update_kernel_lost_()
+{
+    query_trace_lost_(user_session_.get());
+    query_trace_lost_(kernel_session_.get());
+}
+
+
+void SealighterSession::log_drop_counts_(bool final)
+{
+    std::uint64_t q = event_queue_.dropped();
+    std::uint64_t k = kernel_events_lost_.load();
+    if (final || q > 0 || k > 0) {
+        loggr.info("event_queue_drops={} kernel_events_lost={}", q, k);
+    }
+}
+
 
 int SealighterSession::setup_logger_file
 (

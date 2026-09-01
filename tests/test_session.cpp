@@ -136,3 +136,21 @@ TEST(SealighterSession_Buffering, StopBuffering_WithoutStart) {
     // Stopping without ever starting throws an exception
     EXPECT_ANY_THROW(session.stop_bufferring());
 }
+
+// ---------------------------------------------------------------------------
+// 4. Event worker lifecycle tests
+// ---------------------------------------------------------------------------
+
+TEST(SealighterSession_Worker, StartStopEventProcessing_NoTraces) {
+    SealighterSession session;
+    session.start_event_processing();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    session.stop_event_processing();
+    SUCCEED();
+}
+
+TEST(SealighterSession_Worker, StopEventProcessing_WithoutStart_DoesNotThrow) {
+    SealighterSession session;
+    session.stop_event_processing();
+    SUCCEED();
+}

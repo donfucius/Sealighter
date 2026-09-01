@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <chrono>
 #include <memory>
 #include <atomic>
 #include "sealighter_errors.h"
@@ -925,6 +926,10 @@ void SealighterSession::stop()
     if (stopped_.exchange(true)) {
         return;  // Already stopped
     }
+
+    // Capture kernel-level drops before tearing the session down.
+    query_and_update_kernel_lost_();
+
     if (user_session_) {
         user_session_->stop();
     }
@@ -994,6 +999,9 @@ int SealighterSession::run
         loggr.info("warning: failed to set ctrl-c handler (no console — shutdown via StopSealighter event)");
     }
 
+    // Start the event-processing worker before any trace can deliver callbacks.
+    this->start_event_processing();
+
     // Setup Buffering thread if needed
     this->start_bufferring();
 
@@ -1004,22 +1012,30 @@ int SealighterSession::run
         if (user_session_ && !kernel_session_) {
             loggr.info("Starting User Trace...");
             loggr.info("-----------------------------------------");
+            std::jthread trace_thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
+            // Give ProcessTrace a moment to enter the event-delivery loop before
+            // signaling that the consumer is ready; signaling too early drops
+            // events generated right after the startup window.
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             SetSealighterStartedEvent();
-            this->run_trace(user_session_.get());
+            trace_thread.join();
         }
         else if (!user_session_ && kernel_session_) {
             loggr.info("Starting Kernel Trace...");
             loggr.info("-----------------------------------------");
+            std::jthread trace_thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             SetSealighterStartedEvent();
-            this->run_trace(kernel_session_.get());
+            trace_thread.join();
         }
         else {
             // Have to multi-thread it
             loggr.info("Starting User and Kernel Traces...");
             loggr.info("-----------------------------------------");
-            SetSealighterStartedEvent();
             std::jthread user_thread(&SealighterSession::run_trace<krabs::details::ut>, this, user_session_.get());
             std::jthread kernel_thread(&SealighterSession::run_trace<krabs::details::kt>, this, kernel_session_.get());
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            SetSealighterStartedEvent();
 
             // jthread auto-joins on destruction; join here for clarity
             user_thread.join();
@@ -1036,6 +1052,7 @@ int SealighterSession::run
     loggr.info("All traces stopped, cleaning up...");
 
     // Teardown and cleanup
+    this->stop_event_processing();
     this->stop_bufferring();
     this->teardown_logger_file();
     (void)EventUnregisterSealighter();
@@ -1050,6 +1067,8 @@ int SealighterSession::run
     catch (...) {
         // Event may not exist if jthread hasn't created it yet — safe to ignore
     }
+
+    this->log_drop_counts_(true);
 
     if (stop_event_error_.load() != 0) {
         return stop_event_error_.load();

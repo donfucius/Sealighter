@@ -5,11 +5,15 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 
 struct event_buffer_t {
@@ -63,7 +67,10 @@ enum Output_format
 class SealighterSession {
 public:
     SealighterSession() = default;
-    ~SealighterSession() { stop(); };  // Ensure trace sessions are stopped
+    ~SealighterSession() {
+        stop();                  // Ensure trace sessions are stopped
+        stop_event_processing(); // Ensure worker thread is joined
+    };
 
     SealighterSession(const SealighterSession&) = delete;
     SealighterSession& operator=(const SealighterSession&) = delete;
@@ -94,6 +101,9 @@ public:
     void start_bufferring();
     void stop_bufferring();
 
+    void start_event_processing();
+    void stop_event_processing();
+
     int add_kernel_traces(const json& json_config, EVENT_TRACE_PROPERTIES session_properties);
     int add_user_traces(const json& json_config, EVENT_TRACE_PROPERTIES session_properties, const std::wstring& session_name);
 
@@ -112,6 +122,90 @@ private:
     void threaded_write_file_ln(const std::string& event_string);
     void flush_buffered_lists();
     void buffering_thread();
+
+    // -----------------------------------------------------------------
+    // Decoupled event processing: raw event queue + worker thread
+    // -----------------------------------------------------------------
+    struct raw_event_t {
+        EVENT_RECORD record;
+        std::vector<BYTE> user_data;
+        std::vector<BYTE> extended_payloads;
+        std::vector<EVENT_HEADER_EXTENDED_DATA_ITEM> extended_items;
+        std::shared_ptr<sealighter_context_t> context;
+        const krabs::trace_context* trace_ctx;
+    };
+
+    class raw_event_queue_t {
+    public:
+        explicit raw_event_queue_t(size_t capacity)
+            : capacity_(capacity), dropped_(0) {}
+
+        bool enqueue(std::unique_ptr<raw_event_t> ev) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (ev == nullptr) {
+                cv_.notify_one();
+                return true;
+            }
+            if (queue_.size() >= capacity_) {
+                ++dropped_;
+                return false;
+            }
+            queue_.push_back(std::move(ev));
+            cv_.notify_one();
+            return true;
+        }
+
+        std::unique_ptr<raw_event_t> dequeue(
+            const std::atomic_bool& stop,
+            std::chrono::milliseconds timeout,
+            bool& timed_out)
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            timed_out = false;
+            auto deadline = std::chrono::steady_clock::now() + timeout;
+            bool woke = cv_.wait_until(lock, deadline, [&] {
+                return !queue_.empty() || stop.load();
+            });
+            if (queue_.empty()) {
+                if (!woke) timed_out = true;
+                return nullptr;
+            }
+            auto ev = std::move(queue_.front());
+            queue_.pop_front();
+            return ev;
+        }
+
+        std::unique_ptr<raw_event_t> try_dequeue() {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (queue_.empty()) return nullptr;
+            auto ev = std::move(queue_.front());
+            queue_.pop_front();
+            return ev;
+        }
+
+        uint64_t dropped() const { return dropped_.load(); }
+
+    private:
+        size_t capacity_;
+        std::deque<std::unique_ptr<raw_event_t>> queue_;
+        mutable std::mutex mutex_;
+        std::condition_variable cv_;
+        std::atomic<uint64_t> dropped_;
+    };
+
+    void copy_event_record_(
+        const EVENT_RECORD& record,
+        const krabs::trace_context& trace_ctx,
+        std::shared_ptr<struct sealighter_context_t> context,
+        raw_event_t& out);
+
+    void process_raw_event_(raw_event_t& raw);
+    void event_worker_thread_();
+
+    template <typename T>
+    void query_trace_lost_(krabs::trace<T>* trace);
+    void query_and_update_kernel_lost_();
+    void log_drop_counts_(bool final = false);
 
     void WaitForStopEvent();
 
@@ -187,4 +281,11 @@ private:
 
     std::atomic<int> stop_event_error_{ 0 };
     std::atomic_bool stopped_{ false };  // Idempotent guard for stop()
+
+    raw_event_queue_t event_queue_{ 8192 };
+    std::thread event_worker_thread_handle_;
+    std::atomic_bool event_worker_stop_flag_{ false };
+    std::atomic<std::uint64_t> kernel_events_lost_{ 0 };
+    static constexpr std::chrono::milliseconds event_worker_log_interval_ =
+        std::chrono::milliseconds(5000);
 };
