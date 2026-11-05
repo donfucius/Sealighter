@@ -2,6 +2,8 @@
 #include "sealighter_krabs.h"
 #include "sealighter_json.h"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -12,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -64,6 +67,21 @@ enum Output_format
     output_file
 };
 
+enum class Timestamp_precision
+{
+    seconds,
+    milliseconds
+};
+
+/*
+    The only header keys a record may be written without. The record shape
+    requires every other header key, so a config naming anything else is a
+    config error rather than a reduction.
+*/
+inline constexpr std::array<std::string_view, 3> OMITTABLE_HEADER_FIELDS = {
+    "activity_id", "event_name", "event_flags"
+};
+
 class SealighterSession {
 public:
     SealighterSession() = default;
@@ -92,6 +110,19 @@ public:
     int setup_logger_file(const std::string& filename);
     void teardown_logger_file();
     void set_output_format(Output_format format);
+    void set_omit_property_types(bool omit);
+    void set_omit_header_fields(std::vector<std::string> fields);
+    void set_record_parse_errors(bool record);
+    void set_timestamp_precision(Timestamp_precision precision);
+
+    json parse_event_to_json(
+        const EVENT_RECORD& record,
+        const krabs::trace_context& ctx,
+        std::shared_ptr<struct sealighter_context_t> sealighter_context,
+        krabs::schema schema
+    );
+    static json event_log_fields(const json& json_event);
+    void write_event_log(const json& json_event, const std::string& trace_name, const std::string& event_string);
 
     void add_buffered_list(
         const std::string& trace_name,
@@ -110,15 +141,8 @@ public:
     int parse_config(const std::string& config_string);
 
 private:
-    json parse_event_to_json(
-        const EVENT_RECORD& record,
-        const krabs::trace_context& ctx,
-        std::shared_ptr<struct sealighter_context_t> sealighter_context,
-        krabs::schema schema
-    );
     void output_json_event(const json& json_event);
     void threaded_print_ln(const std::string& event_string);
-    void write_event_log(const json& json_event, const std::string& trace_name, const std::string& event_string);
     void threaded_write_file_ln(const std::string& event_string);
     void flush_buffered_lists();
     void buffering_thread();
@@ -266,6 +290,10 @@ private:
     std::ofstream outfile_;
     std::mutex print_mutex_;
     Output_format output_format_ = output_stdout;
+    std::vector<std::string> omit_header_fields_;
+    Timestamp_precision timestamp_precision_ = Timestamp_precision::milliseconds;
+    bool omit_property_types_ = false;
+    bool record_parse_errors_ = false;
 
     std::map<std::string, std::vector<event_buffer_list_t>> buffer_lists_;
     std::uint32_t buffer_lists_timeout_seconds_ = 5;

@@ -74,7 +74,8 @@ std::vector<BYTE> convert_str_wbytes_lowercase(
 */
 std::string convert_timestamp_string
 (
-    const LARGE_INTEGER from
+    const LARGE_INTEGER from,
+    const bool with_milliseconds = false
 );
 
 
@@ -83,7 +84,8 @@ std::string convert_timestamp_string
 */
 std::string convert_filetime_string
 (
-    const FILETIME from
+    const FILETIME from,
+    const bool with_milliseconds = false
 );
 
 
@@ -92,7 +94,8 @@ std::string convert_filetime_string
 */
 std::string convert_systemtime_string
 (
-    const SYSTEMTIME from
+    const SYSTEMTIME from,
+    const bool with_milliseconds = false
 );
 
 

@@ -135,7 +135,8 @@ GUID convert_str_guid
 
 std::string convert_timestamp_string
 (
-    const LARGE_INTEGER from
+    const LARGE_INTEGER from,
+    const bool with_milliseconds
 )
 {
     // Both LARGE_INTEGER timestamps and FILETIMES are
@@ -145,32 +146,38 @@ std::string convert_timestamp_string
     ft.dwHighDateTime = from.HighPart;
     ft.dwLowDateTime = from.LowPart;
 
-    std::string to = convert_filetime_string(ft);
+    std::string to = convert_filetime_string(ft, with_milliseconds);
     return to;
 }
 
 std::string convert_filetime_string
 (
-    const FILETIME from
+    const FILETIME from,
+    const bool with_milliseconds
 )
 {
     SYSTEMTIME stime;
     ::FileTimeToSystemTime(std::addressof(from), std::addressof(stime));
-    std::string to = convert_systemtime_string(stime);
+    std::string to = convert_systemtime_string(stime, with_milliseconds);
     return to;
 }
 
 
 std::string convert_systemtime_string
 (
-    const SYSTEMTIME from
+    const SYSTEMTIME from,
+    const bool with_milliseconds
 )
 {
     std::ostringstream stm;
     const auto w2 = std::setw(2);
     stm << std::setfill('0') << std::setw(4) << from.wYear << '-' << w2 << from.wMonth
         << '-' << w2 << from.wDay << ' ' << w2 << from.wHour
-        << ':' << w2 << from.wMinute << ':' << w2 << from.wSecond << 'Z';
+        << ':' << w2 << from.wMinute << ':' << w2 << from.wSecond;
+    if (with_milliseconds) {
+        stm << '.' << std::setw(3) << from.wMilliseconds;
+    }
+    stm << 'Z';
 
     std::string to = stm.str();
     return to;

@@ -33,6 +33,34 @@ void SealighterSession::threaded_print_ln
 
 
 /*
+    Resolve the header keys the event-log template consumes. Only the keys a
+    reduction may remove resolve to a documented default; the rest are part of
+    the required record shape and are read directly.
+*/
+json SealighterSession::event_log_fields
+(
+    const json& json_event
+)
+{
+    const json& header = json_event["header"];
+
+    return json
+    {
+        { "activity_id",   header.value("activity_id", std::string()) },
+        { "event_flags",   header.value("event_flags", std::uint32_t{}) },
+        { "event_name",    header.value("event_name", std::string()) },
+        { "event_id",      header["event_id"] },
+        { "event_opcode",  header["event_opcode"] },
+        { "event_version", header["event_version"] },
+        { "process_id",    header["process_id"] },
+        { "provider_name", header["provider_name"] },
+        { "task_name",     header["task_name"] },
+        { "thread_id",     header["thread_id"] },
+    };
+}
+
+
+/*
     Write to Event Log
 */
 void SealighterSession::write_event_log
@@ -46,20 +74,21 @@ void SealighterSession::write_event_log
 
     // TODO: Make sure we didn't break this
     // Also fix up schema, no need to to all the str_wstr converting
-    // Also fix up timestamp string
+    const json fields = event_log_fields(json_event);
+
     status = EventWriteSEALIGHTER_REPORT_EVENT(
         event_string.c_str(),
-        json_event["header"]["activity_id"].get<std::string>().c_str(),
-        (USHORT)json_event["header"]["event_flags"].get<std::uint32_t>(),
-        (USHORT)json_event["header"]["event_id"].get<std::uint32_t>(),
-        convert_str_wstr(json_event["header"]["event_name"].get<std::string>()).c_str(),
-        (UCHAR)json_event["header"]["event_opcode"].get<std::uint32_t>(),
-        (UCHAR)json_event["header"]["event_version"].get<std::uint32_t>(),
-        json_event["header"]["process_id"].get<std::uint32_t>(),
-        convert_str_wstr(json_event["header"]["provider_name"].get<std::string>()).c_str(),
-        convert_str_wstr(json_event["header"]["task_name"].get<std::string>()).c_str(),
-        json_event["header"]["thread_id"].get<std::uint32_t>(),
-        0,  // schema.timestamp().quadPart
+        fields["activity_id"].get<std::string>().c_str(),
+        (USHORT)fields["event_flags"].get<std::uint32_t>(),
+        (USHORT)fields["event_id"].get<std::uint32_t>(),
+        convert_str_wstr(fields["event_name"].get<std::string>()).c_str(),
+        (UCHAR)fields["event_opcode"].get<std::uint32_t>(),
+        (UCHAR)fields["event_version"].get<std::uint32_t>(),
+        fields["process_id"].get<std::uint32_t>(),
+        convert_str_wstr(fields["provider_name"].get<std::string>()).c_str(),
+        convert_str_wstr(fields["task_name"].get<std::string>()).c_str(),
+        fields["thread_id"].get<std::uint32_t>(),
+        0,  // template 'timestamp' stays 0; the event time is in the JSON header string
         trace_name.c_str()
     );
 
@@ -176,14 +205,16 @@ json SealighterSession::parse_event_to_json
 )
 {
     std::string trace_name = sealighter_context->trace_name;
+    const bool with_milliseconds = (Timestamp_precision::milliseconds == timestamp_precision_);
     json json_properties;
     json json_properties_types;
+    json json_parse_errors = json::array();
     json json_header = {
         { "event_id", schema.event_id() },
         { "event_name", convert_wstr_str(schema.event_name()) },
         { "task_name", convert_wstr_str(schema.task_name()) },
         { "thread_id", schema.thread_id() },
-        { "timestamp", convert_timestamp_string(schema.timestamp()) },
+        { "timestamp", convert_timestamp_string(schema.timestamp(), with_milliseconds) },
         { "event_flags", schema.event_flags() },
         { "event_opcode", schema.event_opcode() },
         { "event_version", schema.event_version() },
@@ -192,6 +223,10 @@ json SealighterSession::parse_event_to_json
         { "activity_id", convert_guid_str(schema.activity_id()) },
         { "trace_name", trace_name},
     };
+
+    for (const std::string& field : omit_header_fields_) {
+        json_header.erase(field);
+    }
 
     json json_event = { {"header", json_header} };
 
@@ -274,12 +309,12 @@ json SealighterSession::parse_event_to_json
                     break;
                 case TDH_INTYPE_FILETIME:
                     json_properties[prop_name] = convert_filetime_string(
-                        parser.parse<FILETIME>(prop_name_wstr));
+                        parser.parse<FILETIME>(prop_name_wstr), with_milliseconds);
                     json_properties_types[prop_name] = "FILETIME";
                     break;
                 case TDH_INTYPE_SYSTEMTIME:
                     json_properties[prop_name] = convert_systemtime_string(
-                        parser.parse<SYSTEMTIME>(prop_name_wstr));
+                        parser.parse<SYSTEMTIME>(prop_name_wstr), with_milliseconds);
                     json_properties_types[prop_name] = "SYSTEMTIME";
                     break;
                 case TDH_INTYPE_SID:
@@ -319,6 +354,7 @@ json SealighterSession::parse_event_to_json
                     json_properties[prop_name] =
                         convert_bytevector_hexstring(parser.parse<krabs::binary>(prop_name_wstr).bytes());
                     json_properties_types[prop_name] = "OTHER";
+                    json_parse_errors.push_back(prop_name);
                     break;
                 }
             }
@@ -333,9 +369,15 @@ json SealighterSession::parse_event_to_json
                     json_properties_types[prop_name] = "ERROR";
                 }
                 catch (...) {}
+                json_parse_errors.push_back(prop_name);
             }
         }
-        json_event["property_types"] = json_properties_types;
+        if (!omit_property_types_) {
+            json_event["property_types"] = json_properties_types;
+        }
+        if (record_parse_errors_ && !json_parse_errors.empty()) {
+            json_event["parse_errors"] = std::move(json_parse_errors);
+        }
         json_event["properties"] = json_properties;
     }
 
@@ -581,6 +623,30 @@ void SealighterSession::teardown_logger_file()
 void SealighterSession::set_output_format(Output_format format)
 {
     output_format_ = format;
+}
+
+
+void SealighterSession::set_omit_property_types(bool omit)
+{
+    omit_property_types_ = omit;
+}
+
+
+void SealighterSession::set_omit_header_fields(std::vector<std::string> fields)
+{
+    omit_header_fields_ = std::move(fields);
+}
+
+
+void SealighterSession::set_record_parse_errors(bool record)
+{
+    record_parse_errors_ = record;
+}
+
+
+void SealighterSession::set_timestamp_precision(Timestamp_precision precision)
+{
+    timestamp_precision_ = precision;
 }
 
 

@@ -304,6 +304,76 @@ TEST(TimestampConversions, TimestampStringKnown) {
     EXPECT_EQ(convert_timestamp_string(li), "2020-01-31 08:05:43Z");
 }
 
+// -- convert_systemtime_string with milliseconds --
+
+TEST(TimestampConversions, SystemtimeStringMillisecondsZeroPadded) {
+    SYSTEMTIME st = {};
+    st.wYear = 2020; st.wMonth = 1; st.wDay = 15;
+    st.wHour = 12; st.wMinute = 30; st.wSecond = 45; st.wMilliseconds = 7;
+    EXPECT_EQ(convert_systemtime_string(st, true), "2020-01-15 12:30:45.007Z");
+}
+
+TEST(TimestampConversions, SystemtimeStringMillisecondsUpperBound) {
+    SYSTEMTIME st = {};
+    st.wYear = 2020; st.wMonth = 1; st.wDay = 15;
+    st.wHour = 12; st.wMinute = 30; st.wSecond = 45; st.wMilliseconds = 999;
+    EXPECT_EQ(convert_systemtime_string(st, true), "2020-01-15 12:30:45.999Z");
+}
+
+TEST(TimestampConversions, SystemtimeStringOmitsMillisecondsUnlessRequested) {
+    SYSTEMTIME st = {};
+    st.wYear = 2020; st.wMonth = 1; st.wDay = 15;
+    st.wHour = 12; st.wMinute = 30; st.wSecond = 45; st.wMilliseconds = 123;
+    // wMilliseconds is populated but must not appear unless asked for.
+    EXPECT_EQ(convert_systemtime_string(st), "2020-01-15 12:30:45Z");
+    EXPECT_EQ(convert_systemtime_string(st, false), "2020-01-15 12:30:45Z");
+}
+
+TEST(TimestampConversions, OneMillisecondApartIsDistinguishable) {
+    SYSTEMTIME earlier = {};
+    earlier.wYear = 2026; earlier.wMonth = 11; earlier.wDay = 5;
+    earlier.wHour = 1; earlier.wMinute = 2; earlier.wSecond = 3;
+    earlier.wMilliseconds = 500;
+
+    SYSTEMTIME later = earlier;
+    later.wMilliseconds = 501;
+
+    EXPECT_EQ(convert_systemtime_string(earlier), convert_systemtime_string(later));
+    EXPECT_NE(convert_systemtime_string(earlier, true), convert_systemtime_string(later, true));
+}
+
+TEST(TimestampConversions, FiletimeCarriesTheMillisecondFlag) {
+    // The two values differ by exactly one millisecond (10000 units of
+    // 100 ns), which is the step the seconds form cannot see.
+    FILETIME base;
+    base.dwHighDateTime = 0x01D5D80D;
+    base.dwLowDateTime = 0x3C5EC000;
+
+    FILETIME plus_one_ms = base;
+    // Low part carries the offset; 0x3C5EC000 + 10000 cannot overflow.
+    plus_one_ms.dwLowDateTime = base.dwLowDateTime + 10000;
+
+    EXPECT_EQ(convert_filetime_string(base), convert_filetime_string(plus_one_ms));
+    EXPECT_NE(convert_filetime_string(base, true), convert_filetime_string(plus_one_ms, true));
+
+    // This FILETIME is not second-aligned; the fraction it carries is what
+    // the seconds form has been dropping.
+    EXPECT_EQ(convert_filetime_string(base, true), "2020-01-31 08:05:43.631Z");
+    EXPECT_EQ(convert_filetime_string(plus_one_ms, true), "2020-01-31 08:05:43.632Z");
+}
+
+TEST(TimestampConversions, LargeIntegerTimestampCarriesTheMillisecondFlag) {
+    LARGE_INTEGER base;
+    base.HighPart = 0x01D5D80D;
+    base.LowPart = 0x3C5EC000;
+
+    LARGE_INTEGER plus_one_ms = base;
+    plus_one_ms.LowPart = base.LowPart + 10000;
+
+    EXPECT_EQ(convert_timestamp_string(base), convert_timestamp_string(plus_one_ms));
+    EXPECT_NE(convert_timestamp_string(base, true), convert_timestamp_string(plus_one_ms, true));
+}
+
 // ---------------------------------------------------------------------------
 // JSON conversion
 // ---------------------------------------------------------------------------

@@ -855,6 +855,49 @@ int SealighterSession::parse_config(const std::string& config_string)
                 loggr.info("Outputs: {}", format.c_str());
             }
 
+            if (!(!json_props.contains("omit_property_types") || json_props["omit_property_types"].is_null())) {
+                this->set_omit_property_types(json_props["omit_property_types"].get<bool>());
+            }
+
+            if (!(!json_props.contains("omit_header_fields") || json_props["omit_header_fields"].is_null())) {
+                if (json_props["omit_header_fields"].is_array()) {
+                    std::vector<std::string> fields;
+                    for (const json& field : json_props["omit_header_fields"]) {
+                        std::string name = field.get<std::string>();
+                        if (OMITTABLE_HEADER_FIELDS.end() == std::find(
+                            OMITTABLE_HEADER_FIELDS.begin(), OMITTABLE_HEADER_FIELDS.end(), name)) {
+                            loggr.info("omit_header_fields accepts only activity_id, event_name and event_flags, not '{}'", name.c_str());
+                            status = SEALIGHTER_ERROR_PARSE_CONFIG_PROPS;
+                        }
+                        fields.push_back(std::move(name));
+                    }
+                    this->set_omit_header_fields(std::move(fields));
+                }
+                else {
+                    loggr.info("omit_header_fields must be a list of header key names");
+                    status = SEALIGHTER_ERROR_PARSE_CONFIG_PROPS;
+                }
+            }
+
+            if (!(!json_props.contains("record_parse_errors") || json_props["record_parse_errors"].is_null())) {
+                this->set_record_parse_errors(json_props["record_parse_errors"].get<bool>());
+            }
+
+            if (!(!json_props.contains("timestamp_precision") || json_props["timestamp_precision"].is_null())) {
+                std::string precision = json_props["timestamp_precision"].get<std::string>();
+                if ("s" == precision) {
+                    this->set_timestamp_precision(Timestamp_precision::seconds);
+                }
+                else if ("ms" == precision) {
+                    this->set_timestamp_precision(Timestamp_precision::milliseconds);
+                }
+                else {
+                    loggr.info("timestamp_precision must be 's' or 'ms'");
+                    status = SEALIGHTER_ERROR_PARSE_CONFIG_PROPS;
+                }
+                loggr.info("Timestamp precision: {}", precision.c_str());
+            }
+
             if (!(!json_props.contains("buffering_timeout_seconds") || json_props["buffering_timeout_seconds"].is_null())) {
                 auto timeout = json_props["buffering_timeout_seconds"].get<std::uint32_t>();
                 this->set_buffer_lists_timeout(timeout);

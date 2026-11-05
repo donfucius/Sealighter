@@ -4,6 +4,7 @@
 #include "sealighter_handler.h"
 #include "sealighter_errors.h"
 
+#include <filesystem>
 #include <string>
 
 // Helper: a minimal valid kernel_traces entry that can be appended to
@@ -144,7 +145,86 @@ TEST_F(SealighterSession_ParseConfig_Test, OutputFormat_File_NoName) {
 }
 
 // ===========================================================================
-// 7. Deprecated timeout (note the original typo: "timout")
+// 7. Record shape options (all opt-in, all default off)
+// ===========================================================================
+
+TEST_F(SealighterSession_ParseConfig_Test, TimestampPrecision_AcceptsBothForms) {
+    EXPECT_EQ(session.parse_config(make_config(R"("timestamp_precision": "s")")), ERROR_SUCCESS);
+    EXPECT_EQ(session.parse_config(make_config(R"("timestamp_precision": "ms")")), ERROR_SUCCESS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, TimestampPrecision_RejectsUnknownValue) {
+    std::string config = make_config(R"("timestamp_precision": "us")");
+    int status = session.parse_config(config);
+    EXPECT_EQ(status, SEALIGHTER_ERROR_PARSE_CONFIG_PROPS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, TimestampPrecision_RejectsWrongType) {
+    // A non-string value cannot be read as a precision name.
+    std::string config = make_config(R"("timestamp_precision": 3)");
+    int status = session.parse_config(config);
+    EXPECT_EQ(status, SEALIGHTER_ERROR_PARSE_CONFIG_PROPS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, OmitHeaderFields_RejectsAScalar) {
+    std::string config = make_config(R"("omit_header_fields": "activity_id")");
+    int status = session.parse_config(config);
+    EXPECT_EQ(status, SEALIGHTER_ERROR_PARSE_CONFIG_PROPS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, OmitHeaderFields_AcceptsAList) {
+    std::string config = make_config(
+        R"("omit_header_fields": ["activity_id", "event_name", "event_flags"])");
+    EXPECT_EQ(session.parse_config(config), ERROR_SUCCESS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, OmitHeaderFields_RejectsKeysTheRecordShapePins) {
+    // Only activity_id, event_name and event_flags may be dropped; every other
+    // header key is required by the record shape and naming it is a config error.
+    for (const char* name : { "trace_name", "timestamp", "process_id", "thread_id",
+                              "provider_name", "task_name", "event_id", "event_opcode",
+                              "event_version" }) {
+        const std::string config = make_config(
+            "\"omit_header_fields\": [\"" + std::string(name) + "\"]");
+        EXPECT_EQ(session.parse_config(config), SEALIGHTER_ERROR_PARSE_CONFIG_PROPS) << name;
+    }
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, OmitHeaderFields_RejectsListWithOneInvalidName) {
+    std::string config = make_config(
+        R"("omit_header_fields": ["activity_id", "timestamp"])");
+    EXPECT_EQ(session.parse_config(config), SEALIGHTER_ERROR_PARSE_CONFIG_PROPS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, BooleanSwitches_Accepted) {
+    std::string config = make_config(
+        R"("omit_property_types": true, "record_parse_errors": true)");
+    EXPECT_EQ(session.parse_config(config), ERROR_SUCCESS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, BooleanSwitches_RejectNonBoolean) {
+    std::string config = make_config(R"("omit_property_types": "yes")");
+    EXPECT_EQ(session.parse_config(config), SEALIGHTER_ERROR_PARSE_CONFIG_PROPS);
+}
+
+TEST_F(SealighterSession_ParseConfig_Test, AllReductions_AcceptedTogether) {
+    auto log_path = std::filesystem::temp_directory_path() / "sealighter_test_slim_all.log";
+    // dump() quotes the path and escapes the backslashes, which a raw
+    // Windows path is not allowed to be inside a JSON string.
+    const std::string quoted_path = json(log_path.string()).dump();
+    std::string config = make_config(
+        R"("output_format": "file", "output_filename": )" + quoted_path + "," +
+        R"("omit_property_types": true, "record_parse_errors": true,)"
+        R"("omit_header_fields": ["activity_id", "event_name", "event_flags"],)"
+        R"("timestamp_precision": "ms")");
+    EXPECT_EQ(session.parse_config(config), ERROR_SUCCESS);
+    session.teardown_logger_file();
+    std::error_code ec;
+    std::filesystem::remove(log_path, ec);
+}
+
+// ===========================================================================
+// 8. Deprecated timeout (note the original typo: "timout")
 // ===========================================================================
 
 // ===========================================================================
