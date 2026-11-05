@@ -274,6 +274,27 @@ Sealighter 生产就绪改进计划已全部完成。项目从研究原型转变
 
 ---
 
+## Fork note: record size reductions (slim-etw-log-record)
+
+Upstream mergeability is preserved by keeping every reduction behind its own
+configuration key and **off by default**, so a build that selects none of them
+still writes `property_types` and every header key:
+
+- `omit_property_types` - drop the per-record type map
+- `record_parse_errors` - name fields that did not receive a typed value
+- `omit_header_fields` - accepts only `activity_id`, `event_name`, `event_flags`;
+  any other name is a configuration error
+- `timestamp_precision` - `"s"` or `"ms"`
+
+One deliberate default change: **timestamps now default to milliseconds**, which
+also adds the fraction to FILETIME and SYSTEMTIME property values because they
+share one formatter. Select `"s"` to get the pre-existing string byte for byte.
+Measured on the sandbox reference workload: 19,546,164 B to 12,589,396 B, i.e.
+35.6% fewer bytes overall and 37.1% per record, with the sample's own Dynomon
+counts unchanged. Rollback is deleting the keys from the config; no binary swap.
+
+---
+
 **报告生成日期：** 2026-08-06  
 **改进计划版本：** v1.0  
 **状态：** ✅ 全部完成

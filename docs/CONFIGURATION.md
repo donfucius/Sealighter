@@ -102,6 +102,57 @@ If using [Buffering](BUFFERING.md), this specifies how often to flush
 the events, reporting on a group of events as one with a `buffered_count`.
 If using buffering, default is 30 seconds.
 
+The following options shrink the per-record payload. Each reduction is opt-in, and
+with none of them selected a record keeps every key and every property value it
+carried before. Timestamp precision is the exception: milliseconds is the default
+(`timestamp_precision` below).
+
+### omit_property_types
+If true, records are written without the `property_types` object, which restates
+the same per-template type map on every record.
+Default: false
+
+### record_parse_errors
+If true, a record in which at least one property did not receive a typed value
+carries `"parse_errors": ["<field>", ...]` naming those properties. A record where
+everything decoded carries no such key. This is what keeps "absent" distinguishable
+from "could not decode" once `omit_property_types` removes the type map, so the two
+are usually enabled together.
+Default: false
+
+### omit_header_fields
+A list of header key names to drop from every record. Only these three are
+accepted:
+`["activity_id", "event_name", "event_flags"]`
+
+Any other name, including `trace_name`, `timestamp` and `process_id`, is rejected
+as a configuration error rather than applied. `trace_name` in particular is what
+output routing reads, and the remaining header keys are what makes a record
+self-describing, so the record shape pins them.
+
+Each name has a precondition, because these are properties of your subscription
+set rather than of ETW:
+
+ - `activity_id` and `event_name` are constant only while every subscribed provider
+   is a manifest provider that leaves them at the all-zero GUID and the empty string.
+ - `event_flags` is safe to drop only when the bits that vary across your providers
+   are already implied by `provider_name`. In the capture these options were measured
+   on, the only bit that varied marked the Threat-Intelligence records.
+
+Dropping a key is not reversible downstream: Sealighter does not reconstruct a value
+it was told to omit.
+Default: no keys omitted
+
+### timestamp_precision
+Format of the header `timestamp` and of every FILETIME and SYSTEMTIME property.
+Can be one of:
+ - "s": "2020-05-17 11:54:24Z"
+ - "ms": "2020-05-17 11:54:24.316Z"
+
+Milliseconds order events inside one second. Records are still written in the order
+the event queue drains them, so a timestamp is not a global sort key across providers.
+Default: "ms"
+
 _____________
 
 # user_traces

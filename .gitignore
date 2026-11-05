@@ -20,3 +20,7 @@ CODEBUDDY.md
 GEMINI.md
 QODER.md
 opencode.jsonc
+
+# OpenSpec planning artifacts (proposal/design/tasks/specs) stay local to the
+# working copy; this fork does not track them. See slim-etw-log-record task 8.1.
+openspec/

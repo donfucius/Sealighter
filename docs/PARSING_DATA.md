@@ -18,12 +18,12 @@ Events are outputted as JSON, for example:
         "provider_name": "Microsoft-Windows-Kernel-Process",
         "task_name": "ProcessStart",
         "thread_id": 25932,
-        "timestamp": "2020-05-17 11:54:24Z",
+        "timestamp": "2020-05-17 11:54:24.316Z",
         "trace_name": "proc_trace",
         "buffered_count": 2
     },
     "properties": {
-        "CreateTime": "2020-05-17 11:54:24Z",
+        "CreateTime": "2020-05-17 11:54:24.316Z",
         "Flags": 0,
         "ImageChecksum": 219193,
         "ImageName": "\\Device\\HarddiskVolume4\\Windows\\System32\\notepad.exe",
@@ -94,13 +94,28 @@ If [Buffering](BUFFERING.md) is being used and events were buffered together,
 the header will contain an extra field `buffered_count` with the number of events
 that were seen in the `buffering_timout_seconds` period
 
+With [`omit_header_fields`](CONFIGURATION.md#omit_header_fields) enabled, the named
+keys are not written at all. Nothing reconstructs them afterwards.
+
 ## properties
 This is the meat of the event. Unique to every event type, and sometimes even events of the same event ID can have different properties.
 
 Sealighter will attempt to parse every property of every event based upon the property's `TDH_INTYPE`. If the Event does not supply this information, or it's `INTYPE` isn't a simple number, GUID, or string, the property data will be the hex encoded bytes.
 
+Timestamps in properties are formatted by the same helper that formats the header
+`timestamp`, so [`timestamp_precision`](CONFIGURATION.md#timestamp_precision)
+applies to both. The default `"ms"` appends the fraction to every FILETIME and
+SYSTEMTIME property as well as to the header; `"s"` writes them without it, exactly
+as before that option existed.
+
 ## property_types
 To assist in writing [filters](FILTERING.md), we also log the `TDH_INTYPE` of each property. This can also help if you do wish to write your own code to parse specific events.
+
+With [`omit_property_types`](CONFIGURATION.md#omit_property_types) enabled this
+object is not written. When [`record_parse_errors`](CONFIGURATION.md#record_parse_errors)
+is enabled at the same time, a record where a property did not receive a typed
+value names those properties in a `"parse_errors"` array, so a reader can tell a
+field that failed to decode from one that the event never carried.
 
 ## stack_trace
 If the `report_stacktrace` option in the provider configuration is used,
